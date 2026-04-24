@@ -35,12 +35,16 @@ export async function arrancar(app) {
   }
 
   // 3. Registrar webhook de Telegram
-  if (ENV.TELEGRAM_TOKEN && ENV.RAILWAY_DOMAIN) {
+  if (!ENV.TELEGRAM_TOKEN) {
+    console.warn('[Orchestrator] TELEGRAM_BOT_TOKEN no configurado — Jarvis desactivado');
+  } else if (!ENV.RAILWAY_DOMAIN) {
+    console.warn('[Orchestrator] RAILWAY_PUBLIC_DOMAIN no configurado — webhook Telegram no registrado');
+  } else {
     try {
       const bot = TelegramConnector.bot;
       const webhookUrl = `https://${ENV.RAILWAY_DOMAIN}/telegram/webhook`;
-      await bot.setWebHook(webhookUrl);
-      console.log(`[Orchestrator] Telegram webhook registrado: ${webhookUrl}`);
+      const info = await bot.setWebHook(webhookUrl);
+      console.log(`[Orchestrator] Telegram webhook registrado: ${webhookUrl} — ok=${info}`);
     } catch (err) {
       console.warn('[Orchestrator] No se pudo registrar webhook Telegram:', err.message);
     }

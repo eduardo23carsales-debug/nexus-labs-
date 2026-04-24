@@ -154,9 +154,14 @@ router.post('/webhook', async (req, res) => {
     const bot = TelegramConnector.bot;
     if (!bot) return;
 
-    // Mensajes de texto (comandos)
+    // Mensajes de texto (grupos / DMs)
     if (upd.message?.text) {
       await manejarComando(upd.message);
+    }
+
+    // Mensajes de canales (cuando el bot es admin del canal)
+    if (upd.channel_post?.text) {
+      await manejarComando(upd.channel_post);
     }
 
     // Callback de botones inline
