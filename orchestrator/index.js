@@ -43,10 +43,12 @@ export async function arrancar(app) {
     try {
       const bot = TelegramConnector.bot;
       const webhookUrl = `https://${ENV.RAILWAY_DOMAIN}/telegram/webhook`;
+      console.log(`[Orchestrator] Intentando registrar webhook: "${webhookUrl}"`);
       const info = await bot.setWebHook(webhookUrl);
       console.log(`[Orchestrator] Telegram webhook registrado: ${webhookUrl} — ok=${info}`);
     } catch (err) {
-      console.warn('[Orchestrator] No se pudo registrar webhook Telegram:', err.message);
+      console.warn(`[Orchestrator] No se pudo registrar webhook Telegram: ${err.message}`);
+      console.warn(`[Orchestrator] RAILWAY_DOMAIN value: "${ENV.RAILWAY_DOMAIN}"`);
     }
   }
 
