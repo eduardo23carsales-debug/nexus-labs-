@@ -123,8 +123,9 @@ NÚMEROS: di siempre los números en palabras cuando hables.`,
   },
   voice: {
     provider: 'cartesia',
-    voiceId:  '79a125e8-cd45-4c13-8a67-188112f4dd22', // Spanish male — voz ejecutiva
-    model:    'sonic-3',
+    voiceId:  'a0e99841-438c-4a64-b679-ae501e7d6091', // Spanish LATAM male — asistente ejecutivo
+    model:    'sonic-multilingual',
+    language: 'es',
   },
   transcriber: {
     provider:    'deepgram',
