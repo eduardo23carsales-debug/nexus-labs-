@@ -122,10 +122,11 @@ NÚMEROS: di siempre los números en palabras cuando hables.`,
     functions: FUNCIONES_VAPI,
   },
   voice: {
-    provider: 'cartesia',
-    voiceId:  'a0e99841-438c-4a64-b679-ae501e7d6091', // Spanish LATAM male — asistente ejecutivo
-    model:    'sonic-multilingual',
-    language: 'es',
+    provider: '11labs',
+    voiceId:  'hsPqKgfWI5YayyFu0nuN',
+    model:    'eleven_multilingual_v2',
+    stability:        0.5,
+    similarityBoost:  0.75,
   },
   transcriber: {
     provider:    'deepgram',
