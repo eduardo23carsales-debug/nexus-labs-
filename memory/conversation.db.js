@@ -28,11 +28,11 @@ export const ConversationDB = {
     }
     await query(`
       INSERT INTO conversations (chat_id, messages, ultima_actividad)
-      VALUES ($1, $2, NOW())
+      VALUES ($1, $2::jsonb, NOW())
       ON CONFLICT (chat_id) DO UPDATE SET
-        messages         = $2,
+        messages         = $2::jsonb,
         ultima_actividad = NOW()
-    `, [String(chatId), trimmed]);
+    `, [String(chatId), JSON.stringify(trimmed)]);
   },
 
   async limpiar(chatId) {
