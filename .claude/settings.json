@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node sandbox/index.js help)",
+      "Bash(node sandbox/index.js test-scoring)"
+    ]
+  }
+}

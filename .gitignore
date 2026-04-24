@@ -1,0 +1,22 @@
+# Credenciales — NUNCA subir
+.env
+.env.local
+.env.*.local
+
+# Dependencias
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos temporales
+/tmp/
+*.tmp
+
+# Landings generadas (archivos grandes)
+public/landings/

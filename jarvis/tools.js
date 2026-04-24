@@ -1,0 +1,801 @@
+// ════════════════════════════════════════════════════
+// JARVIS — Herramientas completas con CRM
+// ════════════════════════════════════════════════════
+
+import { llamarLead }                           from '../call_agent/caller.js';
+import { llamarConContexto }                    from '../call_agent/context-caller.js';
+import { procesarLead }                         from '../lead_system/capture.js';
+import { ejecutarAnalista }                     from '../agents/analista/index.js';
+import { ejecutarSupervisor }                   from '../agents/supervisor/index.js';
+import { crearCampana, crearCampañaTrafico, generarYSubirImagen } from '../ads_engine/campaign-creator.js';
+import { CampaignManager }                      from '../ads_engine/campaign-manager.js';
+import { MetaConnector }                        from '../connectors/meta.connector.js';
+import { TelegramConnector, esc }               from '../connectors/telegram.connector.js';
+import { ClientDB, ESTADOS_CRM, NICHOS }        from '../crm/client.db.js';
+import { FollowUpDB }                           from '../crm/follow-up.db.js';
+import { LeadsDB }                              from '../memory/leads.db.js';
+import { ConversionsDB }                        from '../memory/conversions.db.js';
+import { PlansDB }                              from '../memory/plans.db.js';
+import { ejecutarPlan }                          from '../agents/ejecutor/index.js';
+import { generarReporte }                       from '../reporting/index.js';
+import { construirLanding }                     from './landing-builder.js';
+import { investigarNicho }                      from '../market_research_agent/index.js';
+import { generarProducto }                      from '../product_engine/index.js';
+import { publicarConStripe }                    from '../product_engine/publisher.js';
+import { HotmartConnector }                     from '../connectors/hotmart.connector.js';
+import { StripeConnector }                      from '../connectors/stripe.connector.js';
+import { ExperimentsDB, ProductsMemoryDB }      from '../memory/products.db.js';
+import { evaluarNicho }                         from '../scaling_agent/index.js';
+import ENV                                      from '../config/env.js';
+
+// ── Definiciones de tools para Claude ─────────────────
+export const TOOL_DEFINITIONS = [
+
+  // ── LLAMADAS ──────────────────────────────────────
+  {
+    name: 'llamar_con_contexto',
+    description: `Llama a un cliente con contexto específico y un objetivo claro.
+Usa esto cuando el usuario diga "llama a [nombre] que tiene [situación] y convéncelo de [objetivo]".
+Esta función genera un script 100% personalizado para esa llamada específica.
+Si el cliente ya existe en el CRM, carga su historial automáticamente.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        telefono:   { type: 'string',  description: 'Número de teléfono del cliente' },
+        nombre:     { type: 'string',  description: 'Nombre completo del cliente' },
+        objetivo:   { type: 'string',  description: 'Objetivo específico de la llamada. Sé detallado: qué se quiere lograr, qué oferta hay, qué ventaja tiene el cliente.' },
+        nicho:      { type: 'string',  description: 'Nicho del cliente: lease-renewal, compra-carro, mal-credito, sin-credito, landing-page, marketing-digital, general, etc.' },
+        datos_producto: {
+          type: 'object',
+          description: 'Datos relevantes del producto o situación del cliente',
+          properties: {
+            tipo_auto:         { type: 'string', description: 'Modelo y año del vehículo actual' },
+            pago_actual:       { type: 'number', description: 'Pago mensual actual del cliente' },
+            pago_nuevo:        { type: 'number', description: 'Nuevo pago que podemos ofrecer' },
+            fecha_vencimiento: { type: 'string', description: 'Fecha de vencimiento del contrato' },
+            credito:           { type: 'string', description: 'Descripción del crédito del cliente' },
+            anios_cliente:     { type: 'number', description: 'Años que lleva siendo cliente' },
+          },
+        },
+        contexto_extra: { type: 'string', description: 'Cualquier información adicional relevante para personalizar la llamada' },
+      },
+      required: ['telefono', 'nombre', 'objetivo'],
+    },
+  },
+
+  {
+    name: 'llamar_simple',
+    description: 'Llama a un número de teléfono de forma simple, sin contexto especial de CRM.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        telefono: { type: 'string' },
+        nombre:   { type: 'string' },
+        segmento: { type: 'string', description: 'mal-credito, sin-credito, urgente, upgrade, oferta-especial' },
+      },
+      required: ['telefono', 'nombre'],
+    },
+  },
+
+  // ── CRM ───────────────────────────────────────────
+  {
+    name: 'guardar_cliente',
+    description: `Guarda o actualiza un cliente en la base de datos CRM.
+Úsalo cuando el usuario proporcione información de un cliente para almacenar.
+También úsalo SIEMPRE después de una llamada para actualizar el estado.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        telefono:       { type: 'string'  },
+        nombre:         { type: 'string'  },
+        email:          { type: 'string'  },
+        nicho:          { type: 'string'  },
+        estado:         { type: 'string', description: 'NUEVO, CONTACTADO, NO_CONTESTO, CITA_AGENDADA, CITA_REALIZADA, CERRADO, NO_INTERESA, SEGUIMIENTO' },
+        notas:          { type: 'string'  },
+        datos_producto: { type: 'object'  },
+        etiquetas:      { type: 'array', items: { type: 'string' } },
+      },
+      required: ['telefono', 'nombre'],
+    },
+  },
+
+  {
+    name: 'ver_clientes',
+    description: 'Muestra clientes del CRM, con opción de filtrar por nicho, estado o búsqueda.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        buscar: { type: 'string',  description: 'Nombre o teléfono para buscar' },
+        nicho:  { type: 'string',  description: 'Filtrar por nicho' },
+        estado: { type: 'string',  description: 'Filtrar por estado' },
+        limit:  { type: 'number',  description: 'Máximo de resultados, default 10' },
+      },
+    },
+  },
+
+  {
+    name: 'programar_seguimiento',
+    description: `Programa un recordatorio de seguimiento para un cliente.
+Úsalo cuando: el cliente no contestó, dijo "llámame mañana", se agendó cita y hay que confirmar, etc.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        telefono: { type: 'string' },
+        nombre:   { type: 'string' },
+        nicho:    { type: 'string' },
+        motivo:   { type: 'string', description: 'Por qué hay que hacer seguimiento' },
+        fecha:    { type: 'string', description: 'Fecha y hora del seguimiento en formato ISO o descripción: "mañana", "en 3 días", "el viernes"' },
+        accion:   { type: 'string', description: 'Qué hacer: llamar, whatsapp, email, cita' },
+      },
+      required: ['telefono', 'nombre', 'motivo'],
+    },
+  },
+
+  {
+    name: 'ver_seguimientos',
+    description: 'Muestra todos los seguimientos pendientes programados.',
+    input_schema: { type: 'object', properties: {} },
+  },
+
+  {
+    name: 'resumen_crm',
+    description: 'Muestra un resumen completo del CRM: total de clientes, por nicho, por estado.',
+    input_schema: { type: 'object', properties: {} },
+  },
+
+  // ── LANDINGS ──────────────────────────────────────
+  {
+    name: 'crear_landing',
+    description: 'Crea una landing page completa para un negocio. Claude genera el HTML con diseño profesional.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_negocio: { type: 'string' },
+        tipo_negocio:   { type: 'string' },
+        servicios:      { type: 'array', items: { type: 'string' } },
+        direccion:      { type: 'string' },
+        telefono:       { type: 'string' },
+        descripcion:    { type: 'string' },
+        color_primario: { type: 'string' },
+      },
+      required: ['nombre_negocio', 'tipo_negocio', 'servicios'],
+    },
+  },
+
+  // ── META ADS ──────────────────────────────────────
+  {
+    name: 'crear_campana_ads',
+    description: `Crea una campaña de Lead Gen en Meta Ads (captura nombre, teléfono y email con formulario nativo).
+Los leads llegan al CRM y Sofía los llama si el ticket es alto.
+Segmentos disponibles: emprendedor-principiante, emprendedor-escalar, afiliado-hotmart, infoproductor, oferta-especial.
+Úsalo cuando Eduardo diga "lanza una campaña de leads", "crea anuncios para emprendedores", etc.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        segmento:    { type: 'string', description: 'Uno de: emprendedor-principiante, emprendedor-escalar, afiliado-hotmart, infoproductor, oferta-especial' },
+        presupuesto: { type: 'number', description: 'Presupuesto diario en USD' },
+      },
+      required: ['segmento', 'presupuesto'],
+    },
+  },
+
+  {
+    name: 'lanzar_campana_producto',
+    description: `Crea una campaña de tráfico directo a URL de venta (Hotmart, landing page, etc).
+A diferencia de crear_campana_ads, esta NO tiene formulario: el anuncio lleva directo a la página de compra.
+Ideal cuando ya tienes un link de Hotmart o landing page listo.
+Úsalo cuando Eduardo diga "lanza ads para el producto X con este link", "crea campaña para vender el curso", etc.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        segmento:     { type: 'string', description: 'Uno de: emprendedor-principiante, emprendedor-escalar, afiliado-hotmart, infoproductor, oferta-especial' },
+        url_destino:  { type: 'string', description: 'URL de la página de venta (Hotmart checkout, landing page, etc.)' },
+        presupuesto:  { type: 'number', description: 'Presupuesto diario en USD' },
+      },
+      required: ['segmento', 'url_destino', 'presupuesto'],
+    },
+  },
+
+  {
+    name: 'pausar_campana',
+    description: 'Pausa una campaña de Meta Ads por nombre parcial.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  // ── REPORTES Y ESTADO ─────────────────────────────
+  {
+    name: 'ver_reporte',
+    description: 'Reporte actual de campañas, leads, conversiones y revenue.',
+    input_schema: { type: 'object', properties: {} },
+  },
+
+  {
+    name: 'estado_sistema',
+    description: 'Estado general del sistema: token Meta, plan pendiente, métricas clave.',
+    input_schema: { type: 'object', properties: {} },
+  },
+
+  {
+    name: 'ejecutar_analista',
+    description: 'Ejecuta el análisis de campañas con IA y genera plan de optimización.',
+    input_schema: { type: 'object', properties: {} },
+  },
+
+  {
+    name: 'ejecutar_supervisor',
+    description: 'Ejecuta el supervisor que revisa y optimiza campañas automáticamente.',
+    input_schema: { type: 'object', properties: {} },
+  },
+
+  {
+    name: 'registrar_venta',
+    description: 'Registra una venta cerrada.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        telefono: { type: 'string' },
+        nombre:   { type: 'string' },
+        valor:    { type: 'number' },
+      },
+      required: ['telefono'],
+    },
+  },
+
+  // ── NUEVAS TOOLS CEO ──────────────────────────────
+  {
+    name: 'ver_historial_cliente',
+    description: `Muestra el historial completo de interacciones de un cliente.
+Úsalo cuando Eduardo pregunte "¿qué pasó con Roberto?", "¿cuándo llamamos a Juan?", "¿tiene cita pendiente?".
+Busca por nombre o teléfono.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        buscar: { type: 'string', description: 'Nombre o teléfono del cliente' },
+      },
+      required: ['buscar'],
+    },
+  },
+
+  {
+    name: 'escalar_campana',
+    description: `Sube el presupuesto diario de una campaña de Meta Ads.
+Úsalo cuando Eduardo diga "escala la campaña de mal crédito", "súbele el presupuesto a urgente", etc.
+Puedes indicar un porcentaje de aumento o un presupuesto nuevo fijo.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_o_id:       { type: 'string', description: 'Nombre parcial o ID de la campaña' },
+        presupuesto_nuevo: { type: 'number', description: 'Nuevo presupuesto diario en dólares (opcional si usas porcentaje)' },
+        porcentaje:        { type: 'number', description: 'Porcentaje de aumento, ej: 20 para subir 20%. Default: 20.' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  {
+    name: 'aprobar_plan',
+    description: `Aprueba y ejecuta el plan pendiente del Analista.
+Úsalo cuando Eduardo diga "aprueba el plan", "ejecuta el plan de hoy", "dale adelante al plan", etc.
+Primero muestra el resumen del plan y luego lo ejecuta.`,
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+
+  // ── MOTOR DE PRODUCTOS DIGITALES ──────────────────
+  {
+    name: 'investigar_nicho',
+    description: `Busca el nicho más rentable para lanzar un producto digital ahora mismo.
+El sistema analiza el mercado hispano de USA y América Latina, evalúa múltiples candidatos con scoring 0-100,
+y devuelve el mejor con todos los detalles: nombre del producto, precio sugerido, cliente ideal, quick win.
+Úsalo cuando Eduardo diga "busca un nicho", "qué producto digital podemos lanzar", "busca oportunidad".`,
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+
+  {
+    name: 'generar_producto',
+    description: `Genera un producto digital completo (HTML interactivo con tabs) a partir de un nicho investigado.
+Crea guías PDF, packs de prompts, plantillas, mini cursos o toolkits según el tipo del nicho.
+El proceso tarda 5-10 minutos porque genera 5-7 secciones de contenido premium.
+Úsalo cuando Eduardo diga "genera el producto", "crea el producto digital", "lanza el producto del nicho X".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nicho_json:       { type: 'string', description: 'El JSON del nicho devuelto por investigar_nicho' },
+        publicar_hotmart: { type: 'boolean', description: 'Si true, publica automáticamente en Hotmart al terminar' },
+      },
+      required: ['nicho_json'],
+    },
+  },
+
+  {
+    name: 'publicar_con_stripe',
+    description: `Publica un producto en Stripe: crea el payment link, genera la landing page de ventas y la deja accesible en /p/:slug.
+Cuando alguien paga, Stripe entrega el producto por email automáticamente (con Resend).
+Úsalo cuando Eduardo tenga un nicho/producto y quiera lanzarlo YA a la venta con Stripe.
+Requiere STRIPE_SECRET_KEY configurado en Railway.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nicho_json:     { type: 'string', description: 'JSON del nicho de investigar_nicho' },
+        experimento_id: { type: 'number', description: 'ID del experimento ya creado (opcional)' },
+      },
+      required: ['nicho_json'],
+    },
+  },
+
+  {
+    name: 'publicar_hotmart',
+    description: `Publica un producto en Hotmart y devuelve el link de pago.
+Úsalo cuando Eduardo tenga un producto listo y quiera ponerlo en venta en Hotmart.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre:      { type: 'string', description: 'Nombre del producto' },
+        descripcion: { type: 'string', description: 'Descripción breve del producto (máx 500 chars)' },
+        precio:      { type: 'number', description: 'Precio en USD' },
+      },
+      required: ['nombre', 'descripcion', 'precio'],
+    },
+  },
+
+  {
+    name: 'ver_experimentos',
+    description: `Muestra los experimentos de productos digitales activos.
+Lista qué productos se están vendiendo, cuántas ventas tienen, y cuánto revenue generaron.
+Úsalo cuando Eduardo pregunte "cómo van los productos", "cuánto hemos vendido", "qué experimentos tenemos".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        estado: { type: 'string', description: 'Estado a filtrar: activo, escalado, muerto, extendido. Default: activo' },
+      },
+    },
+  },
+
+  {
+    name: 'pipeline_completo',
+    description: `Pipeline completo de producto digital: busca nicho → genera producto → crea imagen de portada → lanza campaña en Meta Ads.
+Todo en un solo comando. Tarda ~10 minutos porque genera el producto completo.
+Úsalo cuando Eduardo diga "lanza todo", "haz el proceso completo", "busca nicho y lanza campaña", "arranca el pipeline", etc.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        presupuesto: { type: 'number', description: 'Presupuesto diario en USD para la campaña de Meta Ads. Default: 10' },
+        segmento:    { type: 'string', description: 'Segmento de Meta Ads. Default: emprendedor-principiante' },
+      },
+    },
+  },
+
+  {
+    name: 'rechazar_nicho',
+    description: `Marca un nicho como rechazado para que el sistema lo evite en el futuro.
+Úsalo cuando Eduardo diga "ese nicho no me gusta", "descarta ese", "no quiero ese tema", etc.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nicho_json: { type: 'string', description: 'El JSON del nicho a rechazar (devuelto por investigar_nicho)' },
+      },
+      required: ['nicho_json'],
+    },
+  },
+];
+
+// ── Implementaciones ───────────────────────────────────
+export const TOOL_HANDLERS = {
+
+  async llamar_con_contexto({ telefono, nombre, objetivo, nicho, datos_producto, contexto_extra }) {
+    await llamarConContexto({ telefono, nombre, objetivo, nicho, datos_producto, contextoExtra: contexto_extra });
+    return `Llamada iniciada a ${nombre} (${telefono}) con contexto personalizado. Objetivo: ${objetivo}`;
+  },
+
+  async llamar_simple({ telefono, nombre, segmento = 'general' }) {
+    await llamarLead({ nombre, telefono, segmento });
+    return `Llamada iniciada a ${nombre} (${telefono}).`;
+  },
+
+  async guardar_cliente(datos) {
+    const cliente = await ClientDB.guardar(datos);
+    return `Cliente ${cliente.nombre} guardado en CRM. Nicho: ${cliente.nicho}. Estado: ${cliente.estado}.`;
+  },
+
+  async ver_clientes({ buscar, nicho, estado, limit = 10 } = {}) {
+    const lista = buscar
+      ? (await ClientDB.buscar(buscar)).slice(0, limit)
+      : await ClientDB.listar({ nicho, estado, limit });
+
+    if (!lista.length) return 'No se encontraron clientes con esos criterios.';
+
+    return lista.map(c => {
+      const dp = c.datos_producto || {};
+      const extra = [
+        dp.tipo_auto         ? `Auto: ${dp.tipo_auto}` : null,
+        dp.pago_actual        ? `Pago: $${dp.pago_actual}/mes` : null,
+        dp.fecha_vencimiento  ? `Vence: ${dp.fecha_vencimiento}` : null,
+      ].filter(Boolean).join(' | ');
+      return `• ${c.nombre} — ${c.telefono} — ${c.nicho} — ${c.estado}${extra ? `\n  ${extra}` : ''}`;
+    }).join('\n');
+  },
+
+  async programar_seguimiento({ telefono, nombre, nicho = 'general', motivo, fecha, accion = 'llamar' }) {
+    // Resolver fecha relativa
+    let fechaObj = new Date();
+    if (!fecha || fecha === 'mañana') {
+      fechaObj = new Date(Date.now() + 24 * 3600 * 1000);
+    } else if (fecha.includes('días') || fecha.includes('dias')) {
+      const dias = parseInt(fecha) || 3;
+      fechaObj   = new Date(Date.now() + dias * 24 * 3600 * 1000);
+    } else {
+      fechaObj = new Date(fecha);
+      if (isNaN(fechaObj)) fechaObj = new Date(Date.now() + 24 * 3600 * 1000);
+    }
+
+    const id = await FollowUpDB.programar({ telefono, nombre, nicho, motivo, fecha: fechaObj, accion });
+
+    await ClientDB.guardar({ telefono, nombre, estado: ESTADOS_CRM.SEGUIMIENTO });
+
+    return `Seguimiento programado para ${nombre} — ${fechaObj.toLocaleDateString('es-US')} — Acción: ${accion} — Motivo: ${motivo}`;
+  },
+
+  async ver_seguimientos() {
+    const pendientes = await FollowUpDB.todos();
+    if (!pendientes.length) return 'No hay seguimientos pendientes.';
+    return pendientes.map(f => {
+      const fecha = new Date(f.fecha_programada).toLocaleDateString('es-US');
+      const vencido = new Date(f.fecha_programada) < new Date() ? ' ⚠️ VENCIDO' : '';
+      return `• ${f.nombre} — ${f.telefono} — ${f.accion} — ${fecha}${vencido}\n  ${f.motivo}`;
+    }).join('\n');
+  },
+
+  async resumen_crm() {
+    const porNicho   = await ClientDB.resumenPorNicho();
+    const total      = await ClientDB.total();
+    const pendientes = (await FollowUpDB.pendientes()).length;
+
+    if (total === 0) return 'CRM vacío — aún no hay clientes guardados.';
+
+    const lineas = [`Total clientes: ${total}`, `Seguimientos vencidos: ${pendientes}`, ''];
+    Object.entries(porNicho).forEach(([nicho, stats]) => {
+      lineas.push(`${NICHOS[nicho] || nicho}: ${stats.total} clientes | ${stats.citas} citas | ${stats.cierres} cierres`);
+    });
+    return lineas.join('\n');
+  },
+
+  async crear_landing(datos) {
+    const resultado = await construirLanding(datos);
+    return `Landing creada para "${datos.nombre_negocio}". Archivo: ${resultado.url_relativa}`;
+  },
+
+  async crear_campana_ads({ segmento, presupuesto }) {
+    const resultado = await crearCampana(segmento, presupuesto);
+    return `Campaña de leads creada para "${segmento}" con $${presupuesto}/día. ID: ${resultado.campaign_id}. Los leads llegarán al CRM automáticamente.`;
+  },
+
+  async lanzar_campana_producto({ segmento, url_destino, presupuesto }) {
+    const resultado = await crearCampañaTrafico(segmento, url_destino, presupuesto);
+    return `Campaña de tráfico creada para "${segmento}" con $${presupuesto}/día.\nDestino: ${url_destino}\nID: ${resultado.campaign_id}\n${resultado.ads.length} ads activos.`;
+  },
+
+  async pausar_campana({ nombre_o_id }) {
+    const campanas = await CampaignManager.buscarPorNombre(nombre_o_id);
+    if (!campanas.length) return `No encontré campaña con "${nombre_o_id}".`;
+    await CampaignManager.pausar(campanas[0].id);
+    return `Campaña "${campanas[0].name}" pausada.`;
+  },
+
+  async ver_reporte() {
+    return generarReporte();
+  },
+
+  async estado_sistema() {
+    const token    = await MetaConnector.validarToken();
+    const plan     = await PlansDB.hayPlanPendiente();
+    const conv     = await LeadsDB.resumenConversiones();
+    const rev      = await ConversionsDB.metricas();
+    const crmTotal = await ClientDB.total();
+    const seguim   = (await FollowUpDB.pendientes()).length;
+
+    return [
+      `Token Meta: ${token.ok ? '✅ válido' : '❌ inválido'}`,
+      `Plan pendiente: ${plan ? '⏳ sí' : '✅ ninguno'}`,
+      `Leads totales: ${conv.total_leads} | Cierres: ${conv.cierres}`,
+      `CRM: ${crmTotal} clientes | ${seguim} seguimientos vencidos`,
+      rev.ventas > 0 ? `Revenue: $${rev.revenue}` : '',
+    ].filter(Boolean).join('\n');
+  },
+
+  async ejecutar_analista() {
+    ejecutarAnalista().catch(console.error);
+    return 'Analista ejecutándose. Plan llegará por Telegram en un momento.';
+  },
+
+  async ejecutar_supervisor() {
+    ejecutarSupervisor().catch(console.error);
+    return 'Supervisor ejecutándose. Revisando campañas ahora.';
+  },
+
+  async registrar_venta({ telefono, nombre, valor }) {
+    await LeadsDB.marcarCerrado(telefono, valor || null);
+    await ConversionsDB.registrarVenta({ telefono, nombre: nombre || telefono, valor: valor || 0, segmento: 'manual' });
+    await ClientDB.guardar({ telefono, nombre: nombre || telefono, estado: ESTADOS_CRM.CERRADO });
+    return `Venta registrada${valor ? ` por $${valor}` : ''} para ${nombre || telefono}.`;
+  },
+
+  async ver_historial_cliente({ buscar }) {
+    const resultados = await ClientDB.buscar(buscar);
+    if (!resultados.length) return `No encontré ningún cliente con "${buscar}".`;
+
+    const cliente = resultados[0];
+    const dp      = cliente.datos_producto || {};
+    const lineas  = [
+      `Cliente: ${cliente.nombre} — ${cliente.telefono}`,
+      `Nicho: ${NICHOS[cliente.nicho] || cliente.nicho} | Estado: ${cliente.estado}`,
+    ];
+
+    if (Object.keys(dp).length) {
+      const extras = Object.entries(dp)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(' | ');
+      lineas.push(`Datos: ${extras}`);
+    }
+
+    if (cliente.notas) lineas.push(`Notas: ${cliente.notas}`);
+
+    if (!cliente.historial?.length) {
+      lineas.push('Sin interacciones registradas.');
+    } else {
+      lineas.push(`\nHistorial (${cliente.historial.length} interacciones):`);
+      cliente.historial.slice(0, 8).forEach(h => {
+        const fecha = new Date(h.fecha).toLocaleDateString('es-US');
+        lineas.push(`  ${fecha} — ${h.tipo} — ${h.resultado}${h.notas ? ` — ${h.notas}` : ''}`);
+      });
+    }
+
+    return lineas.join('\n');
+  },
+
+  async escalar_campana({ nombre_o_id, presupuesto_nuevo, porcentaje = 20 }) {
+    const campanas = await CampaignManager.buscarPorNombre(nombre_o_id);
+    if (!campanas.length) return `No encontré campaña con "${nombre_o_id}".`;
+
+    const campana = campanas[0];
+
+    if (presupuesto_nuevo) {
+      await CampaignManager.cambiarPresupuesto(campana.id, presupuesto_nuevo);
+      return `Campaña "${campana.name}" escalada a $${presupuesto_nuevo}/día.`;
+    }
+
+    // Escalar por porcentaje usando el método nativo
+    const presupuestoActual = (campana.daily_budget || 500) / 100; // Meta guarda en centavos
+    await CampaignManager.escalar(campana.id, presupuestoActual, porcentaje / 100);
+    const nuevo = (presupuestoActual * (1 + porcentaje / 100)).toFixed(2);
+    return `Campaña "${campana.name}" escalada +${porcentaje}%. Presupuesto: $${presupuestoActual} → $${nuevo}/día.`;
+  },
+
+  async aprobar_plan() {
+    const plan = await PlansDB.cargar();
+    if (!plan) return 'No hay ningún plan pendiente en este momento. Puedes ejecutar el analista para generar uno nuevo.';
+
+    const resumen = [
+      'Plan pendiente:',
+      plan.pausar?.length  ? `  Pausar ${plan.pausar.length} campaña(s): ${plan.pausar.map(c => c.nombre).join(', ')}` : null,
+      plan.escalar?.length ? `  Escalar ${plan.escalar.length} campaña(s): ${plan.escalar.map(c => `${c.nombre} → $${c.presupuesto_nuevo}/día`).join(', ')}` : null,
+      plan.crear?.length   ? `  Crear ${plan.crear.length} campaña(s): ${plan.crear.map(c => `${c.segmento} $${c.presupuesto}/día`).join(', ')}` : null,
+    ].filter(Boolean).join('\n');
+
+    ejecutarPlan(plan).catch(console.error);
+    await PlansDB.marcarEjecutado();
+
+    return `${resumen}\n\nPlan aprobado y ejecutándose. Recibirás confirmación por Telegram cuando termine.`;
+  },
+
+  // ── MOTOR DE PRODUCTOS DIGITALES ──────────────────
+
+  async investigar_nicho() {
+    await TelegramConnector.notificar('🔍 <b>Researcher:</b> Buscando el mejor nicho para el mercado hispano...').catch(() => {});
+    const nicho = await investigarNicho();
+    await TelegramConnector.notificar(
+      `✅ <b>Nicho encontrado — Score ${nicho.score}/100</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📦 <b>${nicho.nombre_producto}</b>\n` +
+      `💡 ${nicho.subtitulo}\n` +
+      `💵 Precio sugerido: $${nicho.precio}\n` +
+      `🎯 Tipo: ${nicho.tipo}\n` +
+      `👥 Audiencia: ${nicho.subgrupo_latino}\n` +
+      `📢 Formato ad: ${nicho.formato_ad_recomendado}\n\n` +
+      `🔥 <b>Razón:</b> ${nicho.razon}\n\n` +
+      `¿Quieres que genere el producto? Dime: "genera el producto del nicho [nombre]"`
+    ).catch(() => {});
+    return JSON.stringify(nicho);
+  },
+
+  async generar_producto({ nicho_json, publicar_hotmart = false }) {
+    let nicho;
+    try {
+      nicho = typeof nicho_json === 'string' ? JSON.parse(nicho_json) : nicho_json;
+    } catch {
+      return 'Error: nicho_json no es un JSON válido. Primero usa investigar_nicho.';
+    }
+
+    await TelegramConnector.notificar(`🏗️ <b>Generator:</b> Creando "${nicho.nombre_producto}"... Esto tarda 5-10 minutos.`).catch(() => {});
+
+    const html = await generarProducto(nicho);
+
+    // Guardar el HTML en un archivo temporal para que Eduardo lo pueda ver
+    const fs = await import('fs');
+    const path = await import('path');
+    const dir  = path.resolve('/tmp');
+    const file = path.join(dir, `producto_${Date.now()}.html`);
+    fs.writeFileSync(file, html, 'utf8');
+
+    let resultado = `✅ <b>Producto generado: "${nicho.nombre_producto}"</b>\n📄 ${html.length.toLocaleString()} caracteres de HTML premium\n\n`;
+
+    // Crear experimento en DB
+    const exp = await ExperimentsDB.crear({
+      nicho:             nicho.nicho,
+      nombre:            nicho.nombre_producto,
+      tipo:              nicho.tipo,
+      precio:            nicho.precio,
+      contenidoProducto: html,
+    });
+
+    if (publicar_hotmart && HotmartConnector.disponible()) {
+      try {
+        const { hotmart_url } = await HotmartConnector.crearProducto({
+          nombre:      nicho.nombre_producto,
+          descripcion: nicho.subtitulo || nicho.problema_que_resuelve || '',
+          precio:      nicho.precio,
+        });
+        if (exp?.id) {
+          await ExperimentsDB.actualizarEstado(exp.id, 'activo',
+            `Publicado en Hotmart: ${hotmart_url}`
+          );
+        }
+        resultado += `🛒 <b>Publicado en Hotmart:</b> ${hotmart_url}\n`;
+      } catch (err) {
+        resultado += `⚠️ Hotmart falló: ${err.message}\n`;
+      }
+    } else if (publicar_hotmart) {
+      resultado += `⚠️ Hotmart no configurado (HOTMART_CLIENT_ID/SECRET en .env)\n`;
+    }
+
+    resultado += `\nId experimento: ${exp?.id || 'no guardado'}\nSe monitorea automáticamente a las 72h.`;
+    return resultado;
+  },
+
+  async publicar_con_stripe({ nicho_json, experimento_id = null }) {
+    let nicho;
+    try { nicho = typeof nicho_json === 'string' ? JSON.parse(nicho_json) : nicho_json; }
+    catch { return 'JSON inválido. Primero usa investigar_nicho.'; }
+
+    if (!StripeConnector.disponible()) {
+      return '⚠️ STRIPE_SECRET_KEY no configurado. Agrega la variable en Railway y vuelve a intentarlo.';
+    }
+
+    const resultado = await publicarConStripe(nicho, null, experimento_id);
+    const dominio   = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '[dominio Railway]';
+
+    await TelegramConnector.notificar(
+      `🛒 <b>Producto publicado con Stripe</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📦 ${nicho.nombre_producto}\n` +
+      `💵 $${nicho.precio}\n` +
+      `🌐 Landing: ${resultado.landing_url}\n` +
+      `💳 Pago: ${resultado.stripe_payment_link}\n\n` +
+      `Cuando alguien pague → recibe el producto por email automáticamente.`
+    ).catch(() => {});
+
+    return `Publicado. Landing: ${resultado.landing_url} | Stripe: ${resultado.stripe_payment_link}`;
+  },
+
+  async publicar_hotmart({ nombre, descripcion, precio }) {
+    if (!HotmartConnector.disponible()) {
+      return 'Hotmart no configurado. Agrega HOTMART_CLIENT_ID y HOTMART_CLIENT_SECRET en Railway.';
+    }
+    const { hotmart_url } = await HotmartConnector.crearProducto({ nombre, descripcion, precio });
+    return `✅ Publicado en Hotmart: ${hotmart_url}`;
+  },
+
+  async ver_experimentos({ estado = 'activo' }) {
+    const experimentos = await ExperimentsDB.listar(estado);
+    if (!experimentos.length) return `No hay experimentos con estado "${estado}".`;
+    const lineas = experimentos.map(e => {
+      const m = e.metricas || {};
+      return `• ${e.nombre} ($${e.precio}) | ${e.tipo} | Ventas: ${m.ventas || 0} | Revenue: $${m.revenue || 0} | ${e.estado}`;
+    });
+    return `Experimentos (${estado}):\n${lineas.join('\n')}`;
+  },
+
+  async pipeline_completo({ presupuesto = 10, segmento = 'emprendedor-principiante' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    // Paso 1: Investigar nicho
+    await notif('🔍 <b>Pipeline iniciado</b>\n\nPaso 1/4 — Buscando el mejor nicho...');
+    const nicho = await investigarNicho();
+
+    await notif(
+      `✅ <b>Nicho encontrado — Score ${nicho.score}/100</b>\n` +
+      `📦 ${nicho.nombre_producto}\n` +
+      `💵 Precio sugerido: $${nicho.precio}\n\n` +
+      `Paso 2/4 — Generando producto digital...`
+    );
+
+    // Paso 2: Generar producto HTML
+    const html = await generarProducto(nicho);
+
+    const fs   = await import('fs');
+    const path = await import('path');
+    const file = path.join('/tmp', `producto_${Date.now()}.html`);
+    fs.writeFileSync(file, html, 'utf8');
+
+    const exp = await ExperimentsDB.crear({
+      nicho:             nicho.nicho,
+      nombre:            nicho.nombre_producto,
+      tipo:              nicho.tipo,
+      precio:            nicho.precio,
+      contenidoProducto: html,
+    });
+
+    await notif(`✅ <b>Producto generado</b> (${(html.length / 1024).toFixed(0)} KB)\n\nPaso 3/4 — Creando imagen de portada con IA...`);
+
+    // Paso 3: Imagen de portada específica del producto
+    let imagenHash = null;
+    try {
+      const promptImagen = [
+        `Professional digital product cover for "${nicho.nombre_producto}",`,
+        `target audience: ${nicho.subgrupo_latino || 'Hispanic entrepreneurs'},`,
+        `dark premium background, bold white title text, modern design,`,
+        `ebook or course mockup style, high quality marketing image`,
+      ].join(' ');
+      imagenHash = await generarYSubirImagen(promptImagen);
+      await notif(`✅ <b>Imagen de portada creada</b>\n\nPaso 4/4 — Lanzando campaña en Meta Ads con $${presupuesto}/día...`);
+    } catch (err) {
+      await notif(`⚠️ Imagen falló (${err.message}), usando imagen genérica del segmento.\n\nPaso 4/4 — Lanzando campaña...`);
+    }
+
+    // Paso 4: Crear campaña en Meta Ads con la imagen del producto
+    const campaña = await crearCampana(segmento, presupuesto, { imagenHash });
+
+    // Paso 5: Publicar con Stripe si está configurado
+    let stripeInfo = null;
+    if (StripeConnector.disponible()) {
+      await notif(`✅ <b>Campaña en Meta Ads activa</b>\n\nPaso 5/5 — Publicando landing page con Stripe...`);
+      try {
+        stripeInfo = await publicarConStripe(nicho, html, exp?.id);
+      } catch (err) {
+        await notif(`⚠️ Stripe falló: ${err.message}\nEl resto del pipeline está OK.`);
+      }
+    }
+
+    await notif(
+      `🚀 <b>Pipeline completo</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📦 Producto: ${nicho.nombre_producto}\n` +
+      `💵 Precio: $${nicho.precio} | Score: ${nicho.score}/100\n` +
+      `📊 Campaña Meta: ${campaña.nombre}\n` +
+      `💰 Presupuesto: $${presupuesto}/día\n` +
+      `🖼️ Imagen: ${imagenHash ? 'portada del producto ✅' : 'genérica del segmento'}\n` +
+      (stripeInfo ? `🌐 Landing: ${stripeInfo.landing_url}\n💳 Stripe: ${stripeInfo.stripe_payment_link}\n` : `⚠️ Stripe no configurado — agrega STRIPE_SECRET_KEY\n`) +
+      `\nCuando alguien llena el formulario → llegan al CRM.\nCuando alguien paga en la landing → reciben el producto por email.\nDecisión automática a las 72h.`
+    );
+
+    return `Pipeline completo. Producto: "${nicho.nombre_producto}" | Campaña ID: ${campaña.campaign_id} | Landing: ${stripeInfo?.landing_url || 'sin Stripe'}`;
+  },
+
+  async rechazar_nicho({ nicho_json }) {
+    let nicho;
+    try { nicho = typeof nicho_json === 'string' ? JSON.parse(nicho_json) : nicho_json; }
+    catch { return 'JSON inválido. Pasa el nicho como objeto.'; }
+    await ProductsMemoryDB.rechazarNicho(nicho);
+    return `Nicho "${nicho.nicho || nicho}" rechazado y guardado en la blacklist. El sistema lo evitará en el futuro.`;
+  },
+};
