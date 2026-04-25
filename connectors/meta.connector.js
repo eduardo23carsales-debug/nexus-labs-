@@ -98,7 +98,7 @@ export const MetaConnector = {
     const eventData = {
       event_name:       nombre_evento,
       event_time:       ts,
-      event_source_url: `https://${ENV.RAILWAY_DOMAIN || 'autoaprobado.com'}`,
+      event_source_url: `https://${ENV.RAILWAY_DOMAIN || 'nexuslabs.com'}`,
       action_source:    'website',
       user_data:        userData,
       ...(event_id && { event_id }),

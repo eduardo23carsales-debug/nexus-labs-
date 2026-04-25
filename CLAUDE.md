@@ -1,13 +1,11 @@
 # CONTEXTO DEL PROYECTO — Startup Marketing Automático Estilo Jarvis
 
 ## ESTADO GENERAL
-- **Nombre del negocio**: `[NOMBRE_PENDIENTE]` — se definirá cuando el usuario lo decida
+- **Nombre del negocio**: `Nexus Labs`
 - **Versión de código**: next-system-core (package.json)
 - **Deploy**: Railway (railway.json configurado)
 - **Runtime**: Node.js v24, ES Modules (`"type": "module"`)
 - **Puerto**: 3001
-
-> ⚠️ IMPORTANTE: Todos los archivos del proyecto aún dicen "AutoAprobado Miami" — ese es el nombre del proyecto ANTERIOR. Este es un nuevo proyecto. NO usar ese nombre en código nuevo. Cuando el usuario defina el nombre, hay que hacer un reemplazo global.
 
 ---
 
@@ -129,7 +127,7 @@ sandbox/                     → Experimentos y pruebas (NO es código de produc
 | 1 | Persistencia en `/tmp` se borra en redeploy | CRÍTICO | Pendiente migración PG |
 | 2 | `financial_control` no integrado en flujo | MEDIO | Existe pero no se llama |
 | 3 | Sin retry automático en Meta API y VAPI | MEDIO | No hay backoff |
-| 4 | `AutoAprobado Miami` hardcodeado en configs | MEDIO | Espera nombre del negocio |
+| 4 | ~~`AutoAprobado Miami` hardcodeado en configs~~ | ~~MEDIO~~ | ✅ Resuelto — nombre es Nexus Labs |
 | 5 | `global._planPendiente` en Analista | BAJO | Usar PlansDB en su lugar |
 | 6 | Sin tests | BAJO | No hay ninguno |
 | 7 | Rate limiting solo en `/api`, no en webhooks | BAJO | Falta en webhooks |
@@ -189,7 +187,7 @@ node sandbox/index.js test-leads     # Resumen de leads y conversiones
 
 ## LO QUE FALTA DEFINIR (pendiente con el usuario)
 
-- [ ] **Nombre del negocio** — reemplazar "AutoAprobado Miami" en todo el sistema
+- [x] **Nombre del negocio** — ✅ Nexus Labs (reemplazo completado 2026-04-24)
 - [ ] **Nicho(s) iniciales** — ¿solo automotriz? ¿otros desde el inicio?
 - [ ] **Prompt de Sofía** — actualizar con nombre real, ciudad, producto real
 - [ ] **Asesores reales** — nombres y WhatsApp en `business.config.js`
