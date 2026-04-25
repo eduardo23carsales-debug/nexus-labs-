@@ -49,11 +49,17 @@ const DATOS_DEFAULT = {
 export function configurarSofia(segmento, nombre = 'prospecto') {
   const datos = DATOS_SEGMENTO[segmento] || DATOS_DEFAULT;
 
-  const contenidoPrompt = SOFIA_CONFIG.model.messages[0].content
-    .replace(/\{producto_nombre\}/g,     datos.producto_nombre)
-    .replace(/\{producto_descripcion\}/g, datos.producto_descripcion)
-    .replace(/\{beneficio_principal\}/g,  datos.beneficio_principal)
-    .replace(/\{cta_objetivo\}/g,         datos.cta_objetivo);
+  // Reemplaza placeholders de producto Y el nombre real del prospecto en el script
+  const contenidoPrompt = [
+    `NOMBRE DEL PROSPECTO: ${nombre}`,
+    `Cada vez que el script diga "[nombre]" usa "${nombre}" — nunca digas literalmente "nombre".`,
+    '',
+    SOFIA_CONFIG.model.messages[0].content
+      .replace(/\{producto_nombre\}/g,      datos.producto_nombre)
+      .replace(/\{producto_descripcion\}/g,  datos.producto_descripcion)
+      .replace(/\{beneficio_principal\}/g,   datos.beneficio_principal)
+      .replace(/\{cta_objetivo\}/g,          datos.cta_objetivo),
+  ].join('\n');
 
   return {
     ...SOFIA_CONFIG,
