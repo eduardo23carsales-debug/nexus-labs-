@@ -1,9 +1,70 @@
 // ════════════════════════════════════════════════════
 // SOFÍA — Config VAPI inline para llamadas a leads
-// BDC automotriz nivel profesional
 // ════════════════════════════════════════════════════
 
 import ENV from '../config/env.js';
+
+// Datos reales por segmento — reemplazan los {placeholders} del prompt base
+const DATOS_SEGMENTO = {
+  'emprendedor-principiante': {
+    producto_nombre:     'Sistema de Ingresos Digitales',
+    producto_descripcion:'Sistema paso a paso para generar tus primeros ingresos con productos digitales, sin experiencia previa y sin inventario.',
+    beneficio_principal: 'tu primer ingreso digital en 30 días o menos, desde cualquier lugar',
+    cta_objetivo:        'agendar una sesión estratégica de 30 minutos sin costo con Eduardo, el fundador',
+  },
+  'emprendedor-escalar': {
+    producto_nombre:     'Automatización de Ventas con IA',
+    producto_descripcion:'Sistema para automatizar y escalar tu negocio digital usando Meta Ads e inteligencia artificial, sin contratar más personal.',
+    beneficio_principal: 'multiplicar tus ingresos actuales sin intercambiar más tiempo por dinero',
+    cta_objetivo:        'agendar una sesión de diagnóstico de 30 minutos para revisar tu negocio específico',
+  },
+  'afiliado-hotmart': {
+    producto_nombre:     'Sistema de Afiliados con Meta Ads',
+    producto_descripcion:'Método para ganar comisiones del 40 al 80% en Hotmart usando campañas de Meta Ads optimizadas para el mercado hispano.',
+    beneficio_principal: 'tus primeras comisiones de afiliado en la primera semana sin crear ningún producto',
+    cta_objetivo:        'agendar una sesión para ver si eres buen candidato para el sistema de afiliados',
+  },
+  'infoproductor': {
+    producto_nombre:     'Lanzamiento de Infoproducto en 21 Días',
+    producto_descripcion:'Proceso completo para crear y lanzar tu propio producto digital usando inteligencia artificial y Meta Ads, monetizando tu conocimiento.',
+    beneficio_principal: 'lanzar tu producto digital y tener tus primeras ventas en 21 días',
+    cta_objetivo:        'agendar una sesión para diseñar la estrategia de lanzamiento de tu producto',
+  },
+  'oferta-especial': {
+    producto_nombre:     'Sistema Completo de Ingresos Digitales',
+    producto_descripcion:'Acceso al sistema completo con soporte directo de Eduardo y comunidad privada de emprendedores digitales hispanos.',
+    beneficio_principal: 'empezar a generar ingresos esta semana con soporte personalizado incluido',
+    cta_objetivo:        'asegurar tu plaza al precio especial antes de que cierre la oferta',
+  },
+};
+
+const DATOS_DEFAULT = {
+  producto_nombre:     'Productos Digitales con Nexus Labs',
+  producto_descripcion:'Sistema para generar ingresos con productos digitales en el mercado hispano usando Meta Ads e inteligencia artificial.',
+  beneficio_principal: 'generar tus primeros ingresos digitales con un sistema probado',
+  cta_objetivo:        'agendar una sesión estratégica de 30 minutos sin costo',
+};
+
+// Retorna la config de Sofía con los placeholders reemplazados por valores reales del segmento
+export function configurarSofia(segmento, nombre = 'prospecto') {
+  const datos = DATOS_SEGMENTO[segmento] || DATOS_DEFAULT;
+
+  const contenidoPrompt = SOFIA_CONFIG.model.messages[0].content
+    .replace(/\{producto_nombre\}/g,     datos.producto_nombre)
+    .replace(/\{producto_descripcion\}/g, datos.producto_descripcion)
+    .replace(/\{beneficio_principal\}/g,  datos.beneficio_principal)
+    .replace(/\{cta_objetivo\}/g,         datos.cta_objetivo);
+
+  return {
+    ...SOFIA_CONFIG,
+    model: {
+      ...SOFIA_CONFIG.model,
+      messages: [{ role: 'system', content: contenidoPrompt }],
+    },
+    firstMessage: `¡Hola! ¿Hablo con ${nombre}?`,
+    serverUrl: SOFIA_CONFIG.serverUrl,
+  };
+}
 
 export const SOFIA_CONFIG = {
   name: 'Sofía — Nexus Labs',

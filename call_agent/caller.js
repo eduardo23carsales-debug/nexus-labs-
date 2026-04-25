@@ -2,12 +2,12 @@
 // CALL AGENT — Orquestador de llamadas VAPI
 // ════════════════════════════════════════════════════
 
-import { VapiConnector }          from '../connectors/vapi.connector.js';
-import { TelegramConnector, esc } from '../connectors/telegram.connector.js';
-import { SOFIA_CONFIG }           from './sofia.config.js';
-import { ANA_CONFIG }             from './ana.config.js';
-import ENV                        from '../config/env.js';
-import BUSINESS                   from '../config/business.config.js';
+import { VapiConnector }                      from '../connectors/vapi.connector.js';
+import { TelegramConnector, esc }             from '../connectors/telegram.connector.js';
+import { SOFIA_CONFIG, configurarSofia }      from './sofia.config.js';
+import { ANA_CONFIG }                         from './ana.config.js';
+import ENV                                    from '../config/env.js';
+import BUSINESS                               from '../config/business.config.js';
 
 const SEGMENTO_TEXTO = {
   'emprendedor-principiante': 'quiere empezar a generar ingresos con productos digitales',
@@ -28,11 +28,7 @@ export async function llamarLead({ nombre, telefono, segmento }) {
     const call = await VapiConnector.iniciarLlamada({
       telefono,
       nombre,
-      assistantConfig: {
-        ...SOFIA_CONFIG,
-        serverUrl:    SOFIA_CONFIG.serverUrl,
-        firstMessage: `¡Hola! ¿Hablo con ${nombre}?`,
-      },
+      assistantConfig: configurarSofia(segmento, nombre),
     });
 
     const segTexto = SEGMENTO_TEXTO[segmento] || 'se registró para información';
