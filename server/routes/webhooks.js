@@ -21,6 +21,7 @@ import { JARVIS_VOICE_CONFIG }     from '../../jarvis/jarvis-voice.config.js';
 import { VapiConnector }           from '../../connectors/vapi.connector.js';
 import { procesarVentaHotmart }    from '../../connectors/hotmart.connector.js';
 import { SystemState }             from '../../config/system-state.js';
+import { ProjectsDB }              from '../../crm/projects.db.js';
 import ENV                         from '../../config/env.js';
 
 const router = Router();
@@ -210,7 +211,8 @@ async function manejarComando(msg) {
         reply_markup: { inline_keyboard: [
           [{ text: '📊 Reporte',      callback_data: 'reporte'    }, { text: '🧠 Analista',   callback_data: 'analista'   }],
           [{ text: '🔍 Supervisor',   callback_data: 'supervisor' }, { text: '📈 Ventas',     callback_data: 'ventas'     }],
-          [{ text: '🔑 Token Meta',   callback_data: 'token'      }, { text: '🖥️ Status',     callback_data: 'status'     }],
+          [{ text: '📂 Proyectos',    callback_data: 'proyectos'  }, { text: '🖥️ Status',     callback_data: 'status'     }],
+          [{ text: '🔑 Token Meta',   callback_data: 'token'      }, { text: '📞 Jarvis Voz', callback_data: 'jarvis_voz' }],
           [{ text: '🟡 Safe Mode',    callback_data: 'safe_mode'  }, { text: '🔴 Kill Switch', callback_data: 'kill_switch'}],
         ]}
       });
@@ -341,6 +343,13 @@ async function manejarComando(msg) {
       await notif(`🟢 <b>Safe mode desactivado</b>\nSistema operativo completo.`);
       break;
     }
+
+    case '/projects':
+    case '/portafolio': {
+      const resumen = await ProjectsDB.resumenPortafolio();
+      await notif(resumen);
+      break;
+    }
   }
 }
 
@@ -390,6 +399,20 @@ async function manejarCallback(cbq) {
     await llamarLead({ nombre: nombre || 'Lead', telefono: tel, segmento: 'mal-credito' });
   }
 
+  if (data === 'proyectos') {
+    const resumen = await ProjectsDB.resumenPortafolio();
+    await TelegramConnector.notificar(resumen);
+  }
+  if (data === 'jarvis_voz') {
+    try {
+      const rawTel = (ENV.WHATSAPP_EDUARDO || '17869167339').replace(/\D/g, '');
+      const tel    = rawTel.startsWith('1') && rawTel.length === 11 ? `+${rawTel}` : `+1${rawTel}`;
+      await VapiConnector.iniciarLlamada({ telefono: tel, nombre: 'Eduardo', assistantConfig: JARVIS_VOICE_CONFIG });
+      await TelegramConnector.notificar('📞 <b>Jarvis en línea</b> — contesta y dile qué necesitas.');
+    } catch (err) {
+      await TelegramConnector.notificar(`⚠️ Jarvis no pudo llamar: ${esc(err.message)}`);
+    }
+  }
   if (data === 'analista')   { ejecutarAnalista().catch(console.error); }
   if (data === 'supervisor') { ejecutarSupervisor().catch(console.error); }
   if (data === 'ventas') {

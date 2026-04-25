@@ -180,6 +180,37 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE INDEX IF NOT EXISTS idx_customers_email         ON customers(email);
 CREATE INDEX IF NOT EXISTS idx_customers_experiment_id ON customers(experiment_id);
 
+-- ── PORTAFOLIO DE PROYECTOS ────────────────────────
+-- Backbone central: cada iniciativa de negocio vive aquí.
+-- Estado: idea → validando → testing → rentable → escalando | pausado | muerto
+CREATE TABLE IF NOT EXISTS projects (
+  id              SERIAL        PRIMARY KEY,
+  nombre          TEXT          NOT NULL,
+  nicho           TEXT          NOT NULL DEFAULT 'general',
+  tipo            TEXT          NOT NULL DEFAULT 'digital',     -- digital | automotriz | servicio | cliente | campana
+  estado          TEXT          NOT NULL DEFAULT 'idea',        -- state machine
+  descripcion     TEXT,
+  objetivo        TEXT,
+  inversion       NUMERIC(10,2) NOT NULL DEFAULT 0,
+  revenue         NUMERIC(10,2) NOT NULL DEFAULT 0,
+  roi             NUMERIC(8,2),
+  leads           INTEGER       NOT NULL DEFAULT 0,
+  ventas          INTEGER       NOT NULL DEFAULT 0,
+  llamadas        INTEGER       NOT NULL DEFAULT 0,
+  experiment_id   INTEGER       REFERENCES experiments(id),
+  campaign_ids    JSONB         NOT NULL DEFAULT '[]',
+  historial       JSONB         NOT NULL DEFAULT '[]',  -- [{fecha, agente, accion, detalle}]
+  alertas         JSONB         NOT NULL DEFAULT '[]',  -- [{tipo, mensaje, fecha}]
+  notas           TEXT,
+  creado_en       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  actualizado_en  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_estado        ON projects(estado);
+CREATE INDEX IF NOT EXISTS idx_projects_nicho         ON projects(nicho);
+CREATE INDEX IF NOT EXISTS idx_projects_actualizado   ON projects(actualizado_en DESC);
+CREATE INDEX IF NOT EXISTS idx_projects_experiment_id ON projects(experiment_id);
+
 -- ── SECUENCIAS DE EMAIL (abandono + post-compra) ────
 CREATE TABLE IF NOT EXISTS email_sequences (
   id            SERIAL       PRIMARY KEY,

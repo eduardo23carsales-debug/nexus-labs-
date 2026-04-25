@@ -27,6 +27,7 @@ import { StripeConnector }                      from '../connectors/stripe.conne
 import { ExperimentsDB, ProductsMemoryDB }      from '../memory/products.db.js';
 import { evaluarNicho }                         from '../scaling_agent/index.js';
 import ENV                                      from '../config/env.js';
+import { ProjectsDB }                           from '../crm/projects.db.js';
 
 // ── Definiciones de tools para Claude ─────────────────
 export const TOOL_DEFINITIONS = [
@@ -392,6 +393,78 @@ Todo en un solo comando. Tarda ~10 minutos porque genera el producto completo.
       required: ['nicho_json'],
     },
   },
+
+  // ── PORTAFOLIO DE PROYECTOS ───────────────────────
+  {
+    name: 'crear_proyecto',
+    description: `Crea un nuevo proyecto en el portafolio de negocios de Nexus Labs.
+Un proyecto es cualquier iniciativa que Eduardo quiere trackear: un nuevo nicho, un cliente importante, una campaña, una landing page.
+Cada proyecto tiene su propio seguimiento de inversión, revenue, ROI, leads y estado.
+Estados del ciclo de vida: idea → validando → testing → rentable → escalando | pausado | muerto.
+Úsalo cuando Eduardo diga "crea un proyecto para X", "empieza a trackear X", "guarda esto como proyecto".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre:      { type: 'string', description: 'Nombre del proyecto. Ej: "Curso Emprendedores", "Barbería Elite Cuts", "Dealer Hialeah"' },
+        nicho:       { type: 'string', description: 'Nicho del proyecto: digital, automotriz, barberia, inmuebles, marketing, general' },
+        tipo:        { type: 'string', description: 'Tipo: digital, cliente, servicio, campana. Default: digital' },
+        objetivo:    { type: 'string', description: 'Meta específica: qué resultado se espera de este proyecto' },
+        descripcion: { type: 'string', description: 'Descripción breve del proyecto' },
+      },
+      required: ['nombre'],
+    },
+  },
+
+  {
+    name: 'ver_portafolio',
+    description: `Muestra el portafolio completo de proyectos con métricas: inversión, revenue, ROI y estado de cada uno.
+Incluye ROI global del portafolio y alertas activas.
+Úsalo cuando Eduardo pregunte "¿cómo van los proyectos?", "muéstrame el portafolio", "¿qué iniciativas tenemos activas?", "¿cuánto hemos ganado en total?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        estado: { type: 'string', description: 'Filtrar por estado: idea, validando, testing, rentable, escalando, pausado, muerto. Omitir para ver todos.' },
+      },
+    },
+  },
+
+  {
+    name: 'ver_proyecto',
+    description: `Muestra los detalles completos de un proyecto específico: métricas, historial de acciones de agentes, alertas activas, campañas y experimentos vinculados.
+Úsalo cuando Eduardo pregunte "¿cómo va el proyecto X?", "¿qué pasó con el proyecto de barbería?", "muéstrame el historial del proyecto 3".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        buscar: { type: 'string', description: 'Nombre parcial o número ID del proyecto. Ej: "barbería", "curso", "3"' },
+      },
+      required: ['buscar'],
+    },
+  },
+
+  {
+    name: 'actualizar_proyecto',
+    description: `Actualiza un proyecto: cambia su estado en el ciclo de vida, registra ingresos o gastos, agrega notas, suma leads o ventas.
+Úsalo cuando Eduardo diga:
+- "marca el proyecto X como rentable"
+- "el proyecto de barbería generó $500"
+- "gastamos $200 en ads para el proyecto X"
+- "anota en el proyecto X que cerró con Juan"
+- "pausa el proyecto X"
+- "el proyecto X consiguió 10 leads"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        buscar:    { type: 'string',  description: 'Nombre parcial o ID del proyecto a actualizar' },
+        estado:    { type: 'string',  description: 'Nuevo estado: validando, testing, rentable, escalando, pausado, muerto' },
+        revenue:   { type: 'number',  description: 'Revenue a sumar al proyecto en USD' },
+        inversion: { type: 'number',  description: 'Inversión/gasto a sumar en USD' },
+        leads:     { type: 'number',  description: 'Número de leads a sumar' },
+        ventas:    { type: 'number',  description: 'Número de ventas a sumar' },
+        notas:     { type: 'string',  description: 'Notas o anotación a guardar en el proyecto' },
+      },
+      required: ['buscar'],
+    },
+  },
 ];
 
 // ── Implementaciones ───────────────────────────────────
@@ -733,11 +806,30 @@ export const TOOL_HANDLERS = {
         throw err;
       }
 
+      // Auto-crear proyecto en el portafolio
+      let projectId = null;
+      try {
+        const proyecto = await ProjectsDB.crear({
+          nombre:      nicho.nombre_producto,
+          nicho:       nicho.nicho,
+          tipo:        'digital',
+          objetivo:    `Revenue con "${nicho.nombre_producto}" a $${nicho.precio} — Score ${nicho.score}/100`,
+          descripcion: nicho.subtitulo || '',
+        });
+        projectId = proyecto?.id || null;
+        if (projectId) {
+          await ProjectsDB.actualizarEstado(projectId, 'validando', 'pipeline').catch(() => {});
+        }
+      } catch (err) {
+        console.warn('[Pipeline] No pudo crear proyecto:', err.message);
+      }
+
       await notif(
         `✅ <b>Nicho encontrado — Score ${nicho.score}/100</b>\n` +
         `📦 ${nicho.nombre_producto}\n` +
-        `💵 Precio sugerido: $${nicho.precio}\n\n` +
-        `Paso 2/4 — Generando producto digital...`
+        `💵 Precio sugerido: $${nicho.precio}\n` +
+        (projectId ? `📂 Proyecto #${projectId} creado en portafolio\n` : '') +
+        `\nPaso 2/4 — Generando producto digital...`
       );
 
       // Paso 2: Generar producto HTML
@@ -761,6 +853,12 @@ export const TOOL_HANDLERS = {
         precio:            nicho.precio,
         contenidoProducto: html,
       });
+
+      // Vincular experimento al proyecto y avanzar estado a testing
+      if (projectId && exp?.id) {
+        await ProjectsDB.linkearExperimento(projectId, exp.id).catch(() => {});
+        await ProjectsDB.actualizarEstado(projectId, 'testing', 'pipeline', 'producto generado').catch(() => {});
+      }
 
       await notif(`✅ <b>Producto generado</b> (${(html.length / 1024).toFixed(0)} KB)\n\nPaso 3/4 — Creando imagen de portada con IA...`);
 
@@ -788,12 +886,21 @@ export const TOOL_HANDLERS = {
         throw err;
       }
 
+      // Vincular campaña al proyecto y registrar inversión inicial
+      if (projectId && campaña?.campaign_id) {
+        await ProjectsDB.linkearCampana(projectId, campaña.campaign_id).catch(() => {});
+        await ProjectsDB.actualizarMetricas(projectId, { inversion: presupuesto }, 'pipeline').catch(() => {});
+      }
+
       // Paso 5: Publicar con Stripe si está configurado
       let stripeInfo = null;
       if (StripeConnector.disponible()) {
         await notif(`✅ <b>Campaña en Meta Ads activa</b>\n\nPaso 5/5 — Publicando landing page con Stripe...`);
         try {
           stripeInfo = await publicarConStripe(nicho, html, exp?.id);
+          if (projectId && stripeInfo?.landing_url) {
+            await ProjectsDB.registrarAccionAgente(projectId, 'stripe', 'landing_publicada', stripeInfo.landing_url).catch(() => {});
+          }
         } catch (err) {
           await notif(`⚠️ Stripe falló: ${err.message}\nEl resto del pipeline está OK.`);
         }
@@ -825,4 +932,75 @@ export const TOOL_HANDLERS = {
     await ProductsMemoryDB.rechazarNicho(nicho);
     return `Nicho "${nicho.nicho || nicho}" rechazado y guardado en la blacklist. El sistema lo evitará en el futuro.`;
   },
+
+  // ── PORTAFOLIO DE PROYECTOS ───────────────────────
+
+  async crear_proyecto({ nombre, nicho = 'general', tipo = 'digital', objetivo = '', descripcion = '' }) {
+    const proyecto = await ProjectsDB.crear({ nombre, nicho, tipo, objetivo, descripcion });
+    if (!proyecto?.id) return `Proyecto "${nombre}" creado (sin DB — solo en memoria de la conversación).`;
+    return (
+      `Proyecto #${proyecto.id} creado: "<b>${nombre}</b>"\n` +
+      `Nicho: ${nicho} | Tipo: ${tipo}\n` +
+      (objetivo ? `🎯 Objetivo: ${objetivo}\n` : '') +
+      `Estado: 💡 idea\n\n` +
+      `Cuando avance, dime: "avanza el proyecto #${proyecto.id} a validando" o "el proyecto generó $X".`
+    );
+  },
+
+  async ver_portafolio({ estado = null } = {}) {
+    if (estado) {
+      const proyectos = await ProjectsDB.listar({ estado });
+      if (!proyectos.length) return `No hay proyectos con estado "${estado}".`;
+    }
+    return ProjectsDB.resumenPortafolio();
+  },
+
+  async ver_proyecto({ buscar }) {
+    const resultados = await ProjectsDB.buscar(buscar);
+    if (!resultados.length) return `No encontré ningún proyecto con "${buscar}". Usa "ver portafolio" para ver todos.`;
+    return ProjectsDB.formatear(resultados[0]);
+  },
+
+  async actualizar_proyecto({ buscar, estado, revenue, inversion, leads, ventas, notas }) {
+    const resultados = await ProjectsDB.buscar(buscar);
+    const proyecto   = resultados[0];
+    if (!proyecto) return `No encontré ningún proyecto con "${buscar}". Usa "ver portafolio" para listar todos.`;
+
+    const cambios = [];
+
+    if (estado) {
+      try {
+        await ProjectsDB.actualizarEstado(proyecto.id, estado, 'jarvis');
+        cambios.push(`Estado → ${EMOJI_ESTADO_MAP[estado] || ''}${estado}`);
+      } catch (err) {
+        return `⚠️ ${err.message}`;
+      }
+    }
+
+    if (revenue || inversion || leads || ventas) {
+      await ProjectsDB.actualizarMetricas(proyecto.id, {
+        revenue:   revenue   || 0,
+        inversion: inversion || 0,
+        leads:     leads     || 0,
+        ventas:    ventas    || 0,
+      }, 'jarvis');
+      if (revenue)   cambios.push(`+$${revenue} revenue`);
+      if (inversion) cambios.push(`+$${inversion} invertido`);
+      if (leads)     cambios.push(`+${leads} leads`);
+      if (ventas)    cambios.push(`+${ventas} venta(s)`);
+    }
+
+    if (notas) {
+      await ProjectsDB.actualizarNotas(proyecto.id, notas);
+      cambios.push('notas guardadas');
+    }
+
+    if (!cambios.length) return `No se indicó qué actualizar en "${proyecto.nombre}". Especifica: estado, revenue, inversion, leads, ventas o notas.`;
+    return `Proyecto "${proyecto.nombre}" actualizado: ${cambios.join(', ')}.`;
+  },
+};
+
+// Mapa de emojis para mensajes de actualización
+const EMOJI_ESTADO_MAP = {
+  idea: '💡', validando: '🔍', testing: '🧪', rentable: '✅', escalando: '🚀', pausado: '⏸️', muerto: '💀',
 };
