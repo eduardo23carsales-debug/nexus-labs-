@@ -133,6 +133,7 @@ export const ProjectsDB = {
       ...proyecto,
       inversion: nuevaInversion,
       revenue:   nuevoRevenue,
+      roi,                               // usar ROI recién calculado, no el viejo
       leads:     (proyecto.leads    || 0) + leads,
       ventas:    (proyecto.ventas   || 0) + ventas,
     });

@@ -948,11 +948,17 @@ export const TOOL_HANDLERS = {
   },
 
   async ver_portafolio({ estado = null } = {}) {
-    if (estado) {
-      const proyectos = await ProjectsDB.listar({ estado });
-      if (!proyectos.length) return `No hay proyectos con estado "${estado}".`;
-    }
-    return ProjectsDB.resumenPortafolio();
+    if (!estado) return ProjectsDB.resumenPortafolio();
+    const proyectos = await ProjectsDB.listar({ estado });
+    if (!proyectos.length) return `No hay proyectos con estado "${estado}".`;
+    const emoji = { idea:'💡', validando:'🔍', testing:'🧪', rentable:'✅', escalando:'🚀', pausado:'⏸️', muerto:'💀' };
+    const e = emoji[estado] || '📦';
+    return `${e} <b>Proyectos en "${estado}"</b> (${proyectos.length}):\n` +
+      proyectos.map(p => {
+        const rev = parseFloat(p.revenue || 0).toFixed(0);
+        const roi = p.roi !== null && p.roi !== undefined ? ` ROI:${p.roi}%` : '';
+        return `  #${p.id} <b>${p.nombre}</b> — $${rev}${roi}`;
+      }).join('\n');
   },
 
   async ver_proyecto({ buscar }) {
