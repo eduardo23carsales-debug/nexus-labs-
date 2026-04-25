@@ -77,8 +77,8 @@ export const SOFIA_CONFIG = {
   endCallFunctionEnabled: true,
   model: {
     provider:    'openai',
-    model:       'gpt-4o-mini',
-    temperature: 0.8,
+    model:       'gpt-4o',
+    temperature: 0.65,
     messages: [{
       role: 'system',
       content: `Eres Sofía, coordinadora de sesiones estratégicas de Nexus Labs. Tu trabajo es conectar a personas interesadas en productos digitales con Eduardo Ferrer, el CEO, para una sesión de estrategia de 30 minutos sin costo. Tu voz es cálida, pausada y profesional — como una persona de confianza, no una vendedora. Cada respuesta es corta, escuchas más de lo que hablas.
@@ -128,6 +128,9 @@ OBJECIONES COMUNES:
 - "No tengo tiempo" → "Entiendo perfectamente [nombre] — todos andamos ocupados. Por eso son solo treinta minutos y es por videollamada desde donde estés. ¿Esta semana o la próxima te queda mejor?"
 - "¿Cuánto cuesta?" → "La sesión es completamente sin costo. Es para ver si tiene sentido para tu caso antes de cualquier inversión. ¿El martes o el miércoles?"
 - "Voy a pensarlo" → "Claro [nombre], tiene sentido. ¿Qué es lo que más te genera duda? Quizás te puedo aclarar algo ahora mismo." Escucha. Responde con empatía. Luego → "¿Qué tal si agendamos la sesión y si no convence simplemente no continúas? No pierdes nada. ¿Mañana o pasado?"
+- "Mándame información primero" → "Claro, con gusto. De hecho la sesión con Eduardo es mucho más valiosa que cualquier PDF porque él revisa tu caso específico en vivo. ¿Le agendamos y además te mando el detalle por WhatsApp antes? ¿El martes o el miércoles te queda?"
+- "Llámame después / ahora no puedo" → "No hay problema [nombre]. ¿Cuándo sería buen momento — esta tarde o mañana en la mañana? Así te llamo yo a ti a esa hora exacta."
+- "¿De qué empresa es esto?" → "Somos Nexus Labs, una empresa de Miami especializada en ayudar a emprendedores del mercado hispano a generar ingresos con productos digitales usando inteligencia artificial. Eduardo, el fundador, trabaja directamente con cada cliente en la sesión inicial."
 - "No me interesa" → "No hay problema [nombre], si en algún momento cambias de idea aquí estamos. ¡Que te vaya muy bien!" → endCall()
 - Agresivo → "Disculpa la molestia — tú llenaste un formulario con nosotros y solo quería darte seguimiento. Si no es buen momento lo respeto totalmente." Si insiste → endCall()
 
@@ -159,8 +162,15 @@ REGLAS DE ORO:
     provider:    'deepgram',
     model:       'nova-2',
     language:    'es',
-    keywords:    ['Nexus', 'Labs', 'sesión', 'estrategia', 'producto', 'digital', 'Eduardo', 'sí', 'no', 'claro', 'bueno', 'ok', 'adelante', 'dime'],
-    endpointing: 200,
+    keywords:    [
+      'Nexus', 'Labs', 'Eduardo', 'Sofía',
+      'sesión', 'estrategia', 'producto', 'digital',
+      'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo',
+      'mañana', 'tarde', 'mediodía', 'semana',
+      'sí', 'no', 'claro', 'bueno', 'ok', 'adelante', 'dime', 'perfecto',
+      'interés', 'disponible', 'tiempo', 'WhatsApp',
+    ],
+    endpointing: 250,
   },
   startSpeakingPlan: {
     waitSeconds: 0.4,
@@ -194,9 +204,13 @@ REGLAS DE ORO:
       schema: {
         type: 'object',
         properties: {
-          citaAgendada: { type: 'boolean', description: 'true si el cliente confirmó una cita' },
-          diaCita:      { type: 'string',  description: 'Día de la cita, ejemplo: "martes", "viernes"' },
-          horaCita:     { type: 'string',  description: 'Hora de la cita, ejemplo: "10 de la mañana"' },
+          citaAgendada:      { type: 'boolean', description: 'true si el cliente confirmó día y hora de sesión' },
+          diaCita:           { type: 'string',  description: 'Día de la cita: "lunes", "martes", etc.' },
+          horaCita:          { type: 'string',  description: 'Hora de la cita: "diez de la mañana", "dos de la tarde"' },
+          interesado:        { type: 'boolean', description: 'true si el prospecto mostró interés genuino aunque no haya agendado' },
+          motivoPrincipal:   { type: 'string',  description: 'Qué motivó al prospecto a llenar el formulario — en sus propias palabras' },
+          objecionPrincipal: { type: 'string',  description: 'Principal objeción que expresó: tiempo, costo, desconfianza, no_interesa, etc.' },
+          segmentoConfirmado:{ type: 'string',  description: 'Qué tipo de emprendedor es realmente: principiante, escalar, afiliado, infoproductor, otro' },
         }
       }
     },
@@ -204,7 +218,7 @@ REGLAS DE ORO:
       enabled: true,
       messages: [{
         role:    'system',
-        content: 'Resume la llamada en español en máximo 3 líneas: qué dijo el cliente, si mostró interés, si agendó cita, y cualquier dato importante.',
+        content: 'Resume la llamada en español en máximo 4 líneas: actitud del cliente, motivación principal, objeción si hubo, resultado final (cita/no interés/callback). Incluye cualquier dato de negocio relevante que mencionó.',
       }]
     }
   },
