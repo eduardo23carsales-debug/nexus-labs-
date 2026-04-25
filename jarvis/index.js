@@ -112,7 +112,7 @@ export async function procesarMensajeJarvis(texto, chatId) {
   // Verificar kill switch
   if (await SystemState.isKillSwitch()) {
     await TelegramConnector.notificar(
-      `🔴 <b>KILL SWITCH ACTIVO</b>\nEl sistema está detenido. Usa /safe_off para reactivar en modo seguro o /kill_off para reactivar completamente.`
+      `🔴 <b>KILL SWITCH ACTIVO</b>\nEl sistema está detenido. Usa /kill_off para reactivar.`
     );
     return;
   }

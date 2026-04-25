@@ -17,7 +17,7 @@ async function llamadasRecientes(telefono) {
   try {
     const { rows } = await query(
       `SELECT COUNT(*) AS total FROM calls
-       WHERE telefono = $1 AND created_at > NOW() - INTERVAL '${VENTANA_HORAS} hours'`,
+       WHERE telefono = $1 AND llamada_en > NOW() - INTERVAL '${VENTANA_HORAS} hours'`,
       [telefono]
     );
     return parseInt(rows[0]?.total || 0);
