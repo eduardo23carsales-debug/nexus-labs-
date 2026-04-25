@@ -8,12 +8,13 @@
 //   4. Validar que el entorno esté correcto al inicio
 // ════════════════════════════════════════════════════
 
-import { MetaConnector }     from '../connectors/meta.connector.js';
-import { TelegramConnector } from '../connectors/telegram.connector.js';
-import { iniciarScheduler }  from '../jobs/scheduler.js';
-import { runMigrations }     from '../database/migrate.js';
-import ENV                   from '../config/env.js';
-import axios                 from 'axios';
+import { MetaConnector }       from '../connectors/meta.connector.js';
+import { TelegramConnector }   from '../connectors/telegram.connector.js';
+import { iniciarScheduler }    from '../jobs/scheduler.js';
+import { runMigrations }       from '../database/migrate.js';
+import { initSystemState }     from '../config/system-state.js';
+import ENV                     from '../config/env.js';
+import axios                   from 'axios';
 
 export async function arrancar(app) {
   const PORT = ENV.PORT;
@@ -27,6 +28,8 @@ export async function arrancar(app) {
   if (ENV.DATABASE_URL) {
     try {
       await runMigrations();
+      await initSystemState();
+      console.log('[Orchestrator] System state inicializado ✅');
     } catch (err) {
       console.error('[Orchestrator] ⚠️ Error en migraciones DB:', err.message);
     }

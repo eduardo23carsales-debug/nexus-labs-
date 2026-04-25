@@ -20,6 +20,7 @@ import { manejarFuncionVoz }       from '../../jarvis/voice-function-handler.js'
 import { JARVIS_VOICE_CONFIG }     from '../../jarvis/jarvis-voice.config.js';
 import { VapiConnector }           from '../../connectors/vapi.connector.js';
 import { procesarVentaHotmart }    from '../../connectors/hotmart.connector.js';
+import { SystemState }             from '../../config/system-state.js';
 import ENV                         from '../../config/env.js';
 
 const router = Router();
@@ -174,9 +175,23 @@ router.post('/webhook', async (req, res) => {
   }
 });
 
+// ── Validación de usuario autorizado ─────────────────
+function esUsuarioAutorizado(chatId) {
+  const autorizado = ENV.TELEGRAM_CHAT_ID?.toString().replace('-', '');
+  const entrante   = chatId?.toString().replace('-', '');
+  return autorizado && entrante && entrante === autorizado;
+}
+
 // ── Comandos Telegram ─────────────────────────────────
 async function manejarComando(msg) {
   const { text, chat } = msg;
+  const chatId = chat.id.toString();
+
+  // Validar que solo Eduardo pueda controlar el sistema
+  if (!esUsuarioAutorizado(chatId)) {
+    console.warn(`[Telegram] Acceso denegado desde chat ${chatId}`);
+    return;
+  }
 
   // Si NO es un comando → Jarvis procesa el texto libre
   if (!text?.startsWith('/')) {
@@ -185,7 +200,6 @@ async function manejarComando(msg) {
   }
 
   const { cmd, args } = TelegramConnector.parsearComando(text);
-  const chatId = chat.id.toString();
   const notif  = (m, opts) => TelegramConnector.notificar(m, opts);
 
   switch (cmd) {
@@ -246,7 +260,6 @@ async function manejarComando(msg) {
     }
 
     case '/jarvis': {
-      // Llama a Eduardo para control por voz
       await notif('📞 Llamando a Jarvis por voz...');
       try {
         const rawTel = (ENV.WHATSAPP_EDUARDO || '17869167339').replace(/\D/g, '');
@@ -260,6 +273,68 @@ async function manejarComando(msg) {
       } catch (err) {
         await notif(`⚠️ Jarvis no pudo llamar: ${esc(err.message)}`);
       }
+      break;
+    }
+
+    case '/status': {
+      const { kill_switch, safe_mode } = await SystemState.getStatus();
+      await notif(
+        `🖥️ <b>Estado del Sistema — Nexus Labs</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `${kill_switch ? '🔴' : '🟢'} Kill Switch: <b>${kill_switch ? 'ACTIVO' : 'inactivo'}</b>\n` +
+        `${safe_mode   ? '🟡' : '🟢'} Safe Mode:   <b>${safe_mode   ? 'ACTIVO' : 'inactivo'}</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `Comandos disponibles:\n` +
+        `/kill_switch — detener todo\n` +
+        `/kill_off — reactivar sistema\n` +
+        `/safe_mode — modo solo lectura\n` +
+        `/safe_off — desactivar safe mode`
+      );
+      break;
+    }
+
+    case '/kill_switch': {
+      await SystemState.activarKillSwitch();
+      await notif(
+        `🔴 <b>KILL SWITCH ACTIVADO</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `El sistema está completamente detenido.\n` +
+        `• Jarvis no ejecuta nada\n` +
+        `• Ningún agente actúa\n` +
+        `• Los webhooks siguen recibiendo datos\n\n` +
+        `Usa /kill_off para reactivar.`
+      );
+      break;
+    }
+
+    case '/kill_off': {
+      await SystemState.desactivarKillSwitch();
+      await SystemState.desactivarSafeMode();
+      await notif(
+        `🟢 <b>Sistema reactivado</b>\n` +
+        `Kill switch y safe mode desactivados.\n` +
+        `Jarvis y todos los agentes operativos.`
+      );
+      break;
+    }
+
+    case '/safe_mode': {
+      await SystemState.activarSafeMode();
+      await notif(
+        `🟡 <b>SAFE MODE ACTIVADO</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `El sistema está en modo lectura.\n` +
+        `• Jarvis puede consultar y reportar\n` +
+        `• Bloqueado: llamadas, campañas, gastos\n` +
+        `• Los cron jobs siguen corriendo\n\n` +
+        `Usa /safe_off para desactivar.`
+      );
+      break;
+    }
+
+    case '/safe_off': {
+      await SystemState.desactivarSafeMode();
+      await notif(`🟢 <b>Safe mode desactivado</b>\nSistema operativo completo.`);
       break;
     }
   }

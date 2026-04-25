@@ -7,7 +7,24 @@ import { TelegramConnector, esc } from '../connectors/telegram.connector.js';
 import { ClientDB, ESTADOS_CRM }  from '../crm/client.db.js';
 import { FollowUpDB }             from '../crm/follow-up.db.js';
 import { SOFIA_CONFIG }           from './sofia.config.js';
+import { query }                  from '../config/database.js';
 import ENV                        from '../config/env.js';
+
+const MAX_LLAMADAS_POR_NUMERO = 2;   // máximo de llamadas al mismo número
+const VENTANA_HORAS           = 4;   // en este período de horas
+
+async function llamadasRecientes(telefono) {
+  try {
+    const { rows } = await query(
+      `SELECT COUNT(*) AS total FROM calls
+       WHERE telefono = $1 AND created_at > NOW() - INTERVAL '${VENTANA_HORAS} hours'`,
+      [telefono]
+    );
+    return parseInt(rows[0]?.total || 0);
+  } catch {
+    return 0;
+  }
+}
 
 function generarPromptContextual(cliente, objetivo, contextoExtra = '') {
   const datos = cliente.datos_producto || {};
@@ -66,6 +83,18 @@ export async function llamarConContexto({ telefono, nombre, objetivo, contextoEx
   if (!ENV.VAPI_API_KEY || !ENV.VAPI_PHONE_ID) {
     await TelegramConnector.notificar('⚠️ <b>Llamada fallida:</b> VAPI no configurado (falta VAPI_API_KEY o VAPI_PHONE_NUMBER_ID en Railway)');
     return { ok: false, error: 'VAPI no configurado' };
+  }
+
+  // Control de frecuencia — evitar spam a un mismo número
+  const recientes = await llamadasRecientes(telefono);
+  if (recientes >= MAX_LLAMADAS_POR_NUMERO) {
+    await TelegramConnector.notificar(
+      `⚠️ <b>Llamada bloqueada a ${esc(nombre)}</b>\n` +
+      `📱 ${esc(telefono)}\n` +
+      `Se han realizado ${recientes} llamadas en las últimas ${VENTANA_HORAS}h (máx ${MAX_LLAMADAS_POR_NUMERO}).\n` +
+      `Espera antes de intentar de nuevo.`
+    );
+    return { ok: false, error: 'Límite de llamadas alcanzado' };
   }
 
   let cliente = await ClientDB.obtener(telefono);

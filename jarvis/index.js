@@ -17,6 +17,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { TelegramConnector, esc } from '../connectors/telegram.connector.js';
 import { TOOL_DEFINITIONS, TOOL_HANDLERS } from './tools.js';
 import { ConversationDB } from '../memory/conversation.db.js';
+import { SystemState, TOOLS_BLOQUEADAS_SAFE_MODE } from '../config/system-state.js';
 import ENV from '../config/env.js';
 
 const SYSTEM_PROMPT = `Eres Jarvis, el agente central de operaciones de una startup de marketing automatizado en Miami.
@@ -108,6 +109,14 @@ export async function procesarMensajeJarvis(texto, chatId) {
     return;
   }
 
+  // Verificar kill switch
+  if (await SystemState.isKillSwitch()) {
+    await TelegramConnector.notificar(
+      `🔴 <b>KILL SWITCH ACTIVO</b>\nEl sistema está detenido. Usa /safe_off para reactivar en modo seguro o /kill_off para reactivar completamente.`
+    );
+    return;
+  }
+
   // Comando especial para reiniciar la memoria de la conversación
   if (texto.trim().toLowerCase() === '/reset' || texto.trim().toLowerCase() === 'reset memoria') {
     await ConversationDB.limpiar(chatId);
@@ -176,9 +185,14 @@ export async function procesarMensajeJarvis(texto, chatId) {
 
           let resultado;
           try {
-            const handler = TOOL_HANDLERS[name];
-            if (!handler) throw new Error(`Tool "${name}" no tiene implementación`);
-            resultado = await handler(input);
+            // Verificar safe mode antes de ejecutar tools de acción
+            if (TOOLS_BLOQUEADAS_SAFE_MODE.has(name) && await SystemState.isSafeMode()) {
+              resultado = `⚠️ Safe Mode activo — "${name}" bloqueada. Solo puedes leer y consultar. Usa /safe_off para desactivar.`;
+            } else {
+              const handler = TOOL_HANDLERS[name];
+              if (!handler) throw new Error(`Tool "${name}" no tiene implementación`);
+              resultado = await handler(input);
+            }
           } catch (err) {
             resultado = `Error en ${name}: ${err.message}`;
             console.error(`[Jarvis] Error en tool ${name}:`, err.message);
