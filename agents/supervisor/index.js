@@ -16,6 +16,13 @@ const {
   maxEscalarPct,
 } = BUSINESS;
 
+// Hora actual en ET — devuelve 0-23
+function horaET() {
+  return parseInt(new Date().toLocaleString('en-US', {
+    timeZone: 'America/New_York', hour: 'numeric', hour12: false,
+  }), 10);
+}
+
 export async function ejecutarSupervisor() {
   console.log('[Supervisor] Iniciando revisión...');
 
@@ -26,19 +33,33 @@ export async function ejecutarSupervisor() {
       return;
     }
 
+    // Procesamiento paralelo: obtener datos de todas las campañas a la vez
+    const resultados = await Promise.allSettled(
+      campanas.map(c => CampaignManager.getDatosCampana(c))
+    );
+
+    const hora = horaET();
+    // Solo escalar entre 9AM y 7PM ET — evitar cambios de presupuesto fuera del horario activo
+    const dentroHorario = hora >= 9 && hora < 19;
+
     const pausadas = [];
     const escaladas = [];
     const consultas = [];
 
-    for (const c of campanas) {
-      const datos = await CampaignManager.getDatosCampana(c);
+    for (let i = 0; i < campanas.length; i++) {
+      const res = resultados[i];
+      if (res.status === 'rejected') {
+        console.error(`[Supervisor] Error obteniendo datos de campaña ${campanas[i].id}:`, res.reason?.message);
+        continue;
+      }
+      const datos = res.value;
       const { spend, leads, cpl } = datos.hoy;
       const presupuesto = datos.presupuesto_dia;
 
-      // Regla 1: Gasto sin leads → PAUSA
+      // Regla 1: Gasto sin leads → PAUSA (aplica siempre, sin importar hora)
       if (spend >= limiteGastoSinLead && leads === 0) {
         try {
-          await CampaignManager.pausar(c.id);
+          await CampaignManager.pausar(campanas[i].id);
           pausadas.push(`• ${esc(datos.nombre)} — gastó $${spend} sin leads`);
           console.log(`[Supervisor] Pausada: ${datos.nombre}`);
         } catch (e) {
@@ -47,21 +68,23 @@ export async function ejecutarSupervisor() {
         continue;
       }
 
-      // Regla 2: Buen CPL → ESCALAR
+      // Regla 2: Buen CPL → ESCALAR (solo en horario activo)
+      if (!dentroHorario) continue;
+
       if (leads > 0 && cpl !== null && cpl < cplObjetivo) {
         const nuevo = +(presupuesto * (1 + maxEscalarPct)).toFixed(2);
         const aumento = nuevo - presupuesto;
 
         if (aumento <= limiteEscalarSolo) {
           try {
-            await CampaignManager.cambiarPresupuesto(c.id, nuevo);
+            await CampaignManager.cambiarPresupuesto(campanas[i].id, nuevo);
             escaladas.push(`• ${esc(datos.nombre)}: $${presupuesto}→$${nuevo}/día (CPL $${cpl})`);
             console.log(`[Supervisor] Escalada: ${datos.nombre} a $${nuevo}`);
           } catch (e) {
             console.error(`[Supervisor] Error escalando ${datos.nombre}:`, e.message);
           }
         } else {
-          consultas.push({ id: c.id, nombre: datos.nombre, presupuesto, nuevo, cpl });
+          consultas.push({ id: campanas[i].id, nombre: datos.nombre, presupuesto, nuevo, cpl });
         }
       }
     }

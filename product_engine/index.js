@@ -445,6 +445,162 @@ Usa acordeón. Sin html ni body.`);
   ]);
 }
 
+async function generarMiniCurso(nicho) {
+  console.log('[Generator] Generando mini curso...');
+  const ctx = [];
+  const modulos = nicho.modulos_temas?.length >= 4 ? nicho.modulos_temas : null;
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Mini Curso 1/5 — Bienvenida...').catch(() => {});
+  const bienvenida = await generarSeccion(`
+${bloqueNicho(nicho)}
+Crea la lección de bienvenida para el mini curso "${nicho.nombre_producto}".
+- Quick Win: qué van a lograr en los próximos 60 minutos de estudio
+- Por qué este curso es diferente a los videos de YouTube
+- Cómo usar el curso: orden, tiempo por lección, materiales necesarios
+- <div class="highlight"> con la transformación prometida
+- Ejercicio de activación: escribe tu situación actual y tu meta en 2 líneas
+Formato: div card con highlight y tip. Sin html ni body.`, 'Bienvenida');
+  ctx.push(resumirParaContexto('Bienvenida', bienvenida));
+  await delay(DELAY_SECCIONES);
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Mini Curso 2/5 — Módulo 1...').catch(() => {});
+  const mod1 = await generarSeccion(`
+${bloqueNicho(nicho)}
+${bloqueContexto(ctx)}
+Crea el Módulo 1: "${modulos?.[0] || 'Fundamentos esenciales'}" para "${nicho.nombre_producto}".
+- Concepto principal explicado en 5 minutos
+- 3 pasos concretos con instrucciones exactas (herramientas reales, dónde hacer clic)
+- Ejemplo real de alguien del subgrupo ${nicho.subgrupo_latino || 'latino'} aplicando esto
+- <div class="tip"> con el error del 80% de principiantes
+- Tarea del módulo: una acción específica a completar ANTES del módulo 2
+Formato: div card con acordeón para subtemas. Sin html ni body.`, modulos?.[0] || 'Módulo 1');
+  ctx.push(resumirParaContexto('Módulo 1', mod1));
+  await delay(DELAY_SECCIONES);
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Mini Curso 3/5 — Módulo 2...').catch(() => {});
+  const mod2 = await generarSeccion(`
+${bloqueNicho(nicho)}
+${bloqueContexto(ctx)}
+Crea el Módulo 2: "${modulos?.[1] || 'Implementación práctica'}" para "${nicho.nombre_producto}".
+- El método en 6 pasos numerados — cada paso con duración estimada
+- Captura de pantalla imaginaria: describe exactamente lo que verían en su pantalla
+- Números concretos: cuánto tiempo, cuánto dinero, qué resultado esperar
+- <div class="highlight"> con el resultado al completar este módulo
+- Tarea: entregable concreto que el alumno envía para validar
+Formato: div card. Sin html ni body.`, modulos?.[1] || 'Módulo 2');
+  ctx.push(resumirParaContexto('Módulo 2', mod2));
+  await delay(DELAY_SECCIONES);
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Mini Curso 4/5 — Módulo 3...').catch(() => {});
+  const mod3 = await generarSeccion(`
+${bloqueNicho(nicho)}
+${bloqueContexto(ctx)}
+Crea el Módulo 3: "${modulos?.[2] || 'Optimización y primeros resultados'}" para "${nicho.nombre_producto}".
+- Cómo saber si está funcionando: las 3 métricas que importan
+- Los 5 ajustes que multiplican resultados
+- Historia de éxito: ${nicho.ejemplo_exito || 'alumno típico con resultados reales'}
+- Qué hacer si algo no está funcionando (árbol de decisiones simple)
+- <div class="tip"> con el atajo que solo los avanzados conocen
+Formato: div card con tabla de métricas. Sin html ni body.`, modulos?.[2] || 'Módulo 3');
+  ctx.push(resumirParaContexto('Módulo 3', mod3));
+  await delay(DELAY_SECCIONES);
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Mini Curso 5/5 — Escala y próximos pasos...').catch(() => {});
+  const escala = await generarSeccion(`
+${bloqueNicho(nicho)}
+${bloqueContexto(ctx)}
+Crea el módulo final "Escala y Próximos Pasos" para "${nicho.nombre_producto}".
+- Plan de 30 días después del curso: semana 1 consolidar, semana 2-3 crecer, semana 4 escalar
+- Los 3 upgrades naturales cuando ya dominas esto (producto siguiente, oferta superior)
+- Comunidad y recursos: dónde encontrar personas del mismo nicho
+- Celebración del logro: lista de verificación de todo lo que aprendieron
+- <div class="highlight"> con el mensaje de cierre y motivación genuina
+Formato: div card con checklist y acordeón. Sin html ni body.`, 'Escala');
+
+  return crearShellHTML(nicho.nombre_producto, nicho.subtitulo, 'mini_curso', [
+    { icono: '👋', titulo: 'Bienvenida', contenido: bienvenida },
+    { icono: '📚', titulo: modulos?.[0] || 'Módulo 1', contenido: mod1 },
+    { icono: '⚡', titulo: modulos?.[1] || 'Módulo 2', contenido: mod2 },
+    { icono: '📈', titulo: modulos?.[2] || 'Módulo 3', contenido: mod3 },
+    { icono: '🚀', titulo: 'Escala y Próximos Pasos', contenido: escala },
+  ]);
+}
+
+async function generarPlantilla(nicho) {
+  console.log('[Generator] Generando plantilla...');
+  const ctx = [];
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Plantilla 1/5 — Instrucciones...').catch(() => {});
+  const instrucciones = await generarSeccion(`
+${bloqueNicho(nicho)}
+Crea la página de instrucciones para la plantilla "${nicho.nombre_producto}".
+- Quick Win: usa esta plantilla ahora mismo — resultado en 10 minutos
+- Cómo duplicar a Google Sheets: pasos exactos con enlace imaginario (drive.google.com/template)
+- Cómo personalizar: qué celdas cambiar, qué fórmulas NO tocar
+- Los 3 casos de uso más comunes para ${nicho.subgrupo_latino || 'el usuario'}
+- <div class="tip"> con el error que rompe la plantilla y cómo evitarlo
+Formato: div card con highlight. Sin html ni body.`, 'Instrucciones');
+  ctx.push(resumirParaContexto('Instrucciones', instrucciones));
+  await delay(DELAY_SECCIONES);
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Plantilla 2/5 — Plantilla Principal...').catch(() => {});
+  const principal = await generarSeccion(`
+${bloqueNicho(nicho)}
+${bloqueContexto(ctx)}
+Crea la plantilla principal COMPLETAMENTE LLENADA para "${nicho.nombre_producto}".
+Muestra una tabla HTML con datos reales y representativos del mercado hispano.
+Incluye: encabezados con formato, al menos 10 filas de ejemplo, fórmulas como texto,
+colores de semaforización (verde/amarillo/rojo), notas en celdas críticas.
+Debajo: explicación de cada columna y para qué sirve el dato.
+Formato: div card + tabla completa llenada. Sin html ni body.`, 'Plantilla Principal');
+  ctx.push(resumirParaContexto('Plantilla Principal', principal));
+  await delay(DELAY_SECCIONES);
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Plantilla 3/5 — Plantilla de Seguimiento...').catch(() => {});
+  const seguimiento = await generarSeccion(`
+${bloqueNicho(nicho)}
+${bloqueContexto(ctx)}
+Crea la plantilla de seguimiento semanal para "${nicho.nombre_producto}".
+Tabla llenada con datos ejemplo de 4 semanas, mostrando progreso y tendencias.
+Columnas que deben incluirse: fecha, métricas clave del nicho, objetivo, real, variación, acciones tomadas.
+<div class="tip"> explicando cómo interpretar las tendencias semana a semana.
+Formato: div card + tabla. Sin html ni body.`, 'Seguimiento Semanal');
+  ctx.push(resumirParaContexto('Seguimiento', seguimiento));
+  await delay(DELAY_SECCIONES);
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Plantilla 4/5 — Scripts y Mensajes...').catch(() => {});
+  const scripts = await generarSeccion(`
+${bloqueNicho(nicho)}
+${bloqueContexto(ctx)}
+Crea la plantilla de comunicación/mensajes para "${nicho.nombre_producto}".
+5 mensajes/scripts completamente escritos para situaciones clave en ${nicho.nicho}:
+1. Primer contacto, 2. Seguimiento sin respuesta, 3. Propuesta de valor, 4. Cierre, 5. Post-venta.
+Cada mensaje: para qué canal (WhatsApp/email/DM), cuándo enviarlo, el mensaje completo listo para copiar.
+<div class="highlight"> con el mensaje que más convierte y por qué.
+Formato: div card por mensaje. Sin html ni body.`, 'Scripts y Mensajes');
+  ctx.push(resumirParaContexto('Scripts', scripts));
+  await delay(DELAY_SECCIONES);
+
+  await TelegramConnector.notificar('📝 <b>Generator:</b> Plantilla 5/5 — Dashboard de Resultados...').catch(() => {});
+  const dashboard = await generarSeccion(`
+${bloqueNicho(nicho)}
+${bloqueContexto(ctx)}
+Crea el dashboard de resultados mensuales para "${nicho.nombre_producto}".
+Tabla resumen con KPIs clave llenada con datos ejemplo para un mes completo.
+Gráfico de barras en HTML (usando divs con heights proporcionales, sin canvas/svg).
+Semaforización automática: verde si supera meta, amarillo si está cerca, rojo si está lejos.
+<div class="highlight"> con el insight más importante del mes.
+Formato: div card + tabla + gráfico HTML. Sin html ni body.`, 'Dashboard');
+
+  return crearShellHTML(nicho.nombre_producto, nicho.subtitulo, 'plantilla', [
+    { icono: '📖', titulo: 'Cómo usar', contenido: instrucciones },
+    { icono: '📋', titulo: 'Plantilla Principal', contenido: principal },
+    { icono: '📅', titulo: 'Seguimiento Semanal', contenido: seguimiento },
+    { icono: '💬', titulo: 'Scripts y Mensajes', contenido: scripts },
+    { icono: '📊', titulo: 'Dashboard de Resultados', contenido: dashboard },
+  ]);
+}
+
 // ── Generador principal exportado ────────────────────
 export async function generarProducto(nicho) {
   console.log(`[Generator] Tipo "${nicho.tipo}": "${nicho.nombre_producto}"`);
@@ -452,7 +608,9 @@ export async function generarProducto(nicho) {
 
   if (nicho.tipo === 'prompts')         html = await generarPackPrompts(nicho);
   else if (nicho.tipo === 'toolkit')    html = await generarToolkit(nicho);
-  else                                  html = await generarGuiaPDF(nicho); // guia_pdf, mini_curso, plantilla
+  else if (nicho.tipo === 'mini_curso') html = await generarMiniCurso(nicho);
+  else if (nicho.tipo === 'plantilla')  html = await generarPlantilla(nicho);
+  else                                  html = await generarGuiaPDF(nicho); // guia_pdf y fallback
 
   console.log(`[Generator] Producto listo — ${html.length} caracteres`);
   return html;

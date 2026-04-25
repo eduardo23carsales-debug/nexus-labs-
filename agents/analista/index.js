@@ -10,6 +10,7 @@ import { PlansDB }                from '../../memory/plans.db.js';
 import { LeadsDB }                from '../../memory/leads.db.js';
 import { CampaignManager }        from '../../ads_engine/campaign-manager.js';
 import { llamarBriefing }         from '../../call_agent/caller.js';
+import { ClientDB }               from '../../crm/client.db.js';
 import ENV                        from '../../config/env.js';
 import BUSINESS                   from '../../config/business.config.js';
 
@@ -24,16 +25,20 @@ export async function ejecutarAnalista() {
       return;
     }
 
-    // Recopilar métricas
-    const datos = await Promise.all(
-      campanas.map(c => CampaignManager.getDatosCampana(c))
-    );
+    // Recopilar todo en paralelo — campañas, conversiones, CRM y plan anterior
+    const [datos, resumenConversiones, resumenCRM, planAnterior] = await Promise.all([
+      Promise.all(campanas.map(c => CampaignManager.getDatosCampana(c))),
+      LeadsDB.resumenConversiones(),
+      ClientDB.resumenPorNicho().catch(() => null),
+      PlansDB.cargar().catch(() => null),
+    ]);
 
-    // Analizar con Claude
+    // Analizar con Claude — incluye contexto histórico para evitar repetir errores del día anterior
     const plan = await AnthropicConnector.analizarCampanas({
       datos,
-      resumenConversiones: await LeadsDB.resumenConversiones(),
+      resumenConversiones: { ...resumenConversiones, crmPorNicho: resumenCRM },
       presupuestoMax:      BUSINESS.presupuestoMaxDia,
+      planAnterior,
     });
 
     // Formatear mensaje Telegram

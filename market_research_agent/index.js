@@ -129,8 +129,9 @@ export async function investigarNicho() {
     ProductsMemoryDB.getBlacklist('digital'),
   ]);
 
-  const ganadoresTexto = ganadores.map(g => g.contenido?.slice(0, 200)).join('\n') || 'Ninguno aún';
-  const blacklistTexto = blacklist.map(b => b.contenido?.slice(0, 200)).join('\n') || 'Ninguno aún';
+  // 500 chars por ganador — suficiente para capturar nicho, precio y razón de éxito
+  const ganadoresTexto = ganadores.map(g => g.contenido?.slice(0, 500)).join('\n---\n') || 'Ninguno aún';
+  const blacklistTexto = blacklist.map(b => b.contenido?.slice(0, 300)).join('\n') || 'Ninguno aún';
 
   let mejorCandidato = null;
   const nichosYaVistos = [];

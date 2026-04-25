@@ -115,7 +115,7 @@ REGLAS DE ORO:
   },
   endCallMessage:       '',
   endCallPhrases:       ['hasta pronto', 'hasta luego', 'chao', 'no me interesa', 'no gracias', 'bye', 'no quiero'],
-  maxDurationSeconds:    300,
+  maxDurationSeconds:    480,
   silenceTimeoutSeconds: 30,
   backgroundSound:       'off',
   backgroundSpeechDenoisingPlan: {

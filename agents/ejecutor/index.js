@@ -7,6 +7,8 @@ import { MetaConnector }          from '../../connectors/meta.connector.js';
 import { TelegramConnector, esc } from '../../connectors/telegram.connector.js';
 import { crearCampana }           from '../../ads_engine/campaign-creator.js';
 import { CampaignManager }        from '../../ads_engine/campaign-manager.js';
+import { ProjectsDB }             from '../../crm/projects.db.js';
+import { PlansDB }                from '../../memory/plans.db.js';
 
 export async function ejecutarPlan(plan) {
   console.log('[Ejecutor] Ejecutando plan aprobado...');
@@ -44,6 +46,21 @@ export async function ejecutarPlan(plan) {
         console.log(`[Ejecutor] Creada: ${c.segmento}`);
       } catch (e) {
         acciones.push(`⚠️ No pude crear ${esc(c.segmento)}: ${esc(e.message)}`);
+      }
+    }
+
+    // Marcar el plan como ejecutado
+    await PlansDB.marcarEjecutado().catch(() => {});
+
+    // Registrar inversión adicional generada por el plan en todos los proyectos activos
+    const inversionNueva = (plan.crear || []).reduce((s, c) => s + (c.presupuesto || 0), 0)
+                         + (plan.escalar || []).reduce((s, e) => s + ((e.presupuesto_nuevo || 0) - (e.presupuesto_actual || 0)), 0);
+
+    if (inversionNueva > 0) {
+      // Registra en los proyectos escalando o en todos los que están activos
+      const proyectos = await ProjectsDB.listar({ estado: 'escalando' }).catch(() => []);
+      for (const p of proyectos) {
+        await ProjectsDB.actualizarMetricas(p.id, { inversion: inversionNueva }, 'ejecutor').catch(() => {});
       }
     }
 

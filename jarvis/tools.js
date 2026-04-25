@@ -26,6 +26,7 @@ import { HotmartConnector }                     from '../connectors/hotmart.conn
 import { StripeConnector }                      from '../connectors/stripe.connector.js';
 import { ExperimentsDB, ProductsMemoryDB }      from '../memory/products.db.js';
 import { evaluarNicho }                         from '../scaling_agent/index.js';
+import { validarIdea, verificarResultado }      from '../validation_agent/index.js';
 import ENV                                      from '../config/env.js';
 import { ProjectsDB }                           from '../crm/projects.db.js';
 
@@ -463,6 +464,38 @@ Incluye ROI global del portafolio y alertas activas.
         notas:     { type: 'string',  description: 'Notas o anotación a guardar en el proyecto' },
       },
       required: ['buscar'],
+    },
+  },
+
+  // ── VALIDATION AGENT ──────────────────────────────
+  {
+    name: 'iniciar_experimento',
+    description: `Inicia un micro-experimento controlado de publicidad para validar una idea antes de escalar.
+Lanza una campaña sandbox con $7/día durante 72 horas y mide si el CPL es rentable.
+Úsalo cuando Eduardo diga "valida este segmento", "prueba esta idea", "quiero saber si funciona X antes de invertir más", etc.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo:        { type: 'string', description: 'Tipo de experimento: segmento, copy, oferta. Default: segmento' },
+        descripcion: { type: 'string', description: 'Descripción de lo que se quiere validar' },
+        segmento:    { type: 'string', description: 'Segmento de Meta Ads a probar' },
+        presupuesto: { type: 'number', description: 'Presupuesto diario en USD. Default: 7' },
+      },
+      required: ['descripcion'],
+    },
+  },
+
+  {
+    name: 'ver_resultado_experimento',
+    description: `Verifica el resultado de un experimento de validación activo.
+Consulta métricas reales (CPL, leads, CTR) y emite veredicto: validado, rechazado, o necesita más datos.
+Úsalo cuando Eduardo pregunte "cómo va el experimento", "ya hay resultado del test", etc.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        experiment_id: { type: 'string', description: 'ID del experimento (lo recibiste al iniciarlo)' },
+      },
+      required: ['experiment_id'],
     },
   },
 ];
@@ -1003,6 +1036,23 @@ export const TOOL_HANDLERS = {
 
     if (!cambios.length) return `No se indicó qué actualizar en "${proyecto.nombre}". Especifica: estado, revenue, inversion, leads, ventas o notas.`;
     return `Proyecto "${proyecto.nombre}" actualizado: ${cambios.join(', ')}.`;
+  },
+
+  // ── VALIDATION AGENT ──────────────────────────────
+
+  async iniciar_experimento({ tipo = 'segmento', descripcion, segmento, presupuesto = 7 }) {
+    const exp = await validarIdea({ tipo, descripcion, segmento, presupuestoPrueba: presupuesto });
+    return `Experimento iniciado (ID: ${exp.id}). Se corre por 72h con $${exp.presupuestoPrueba}/día. Recibirás el resultado por Telegram.`;
+  },
+
+  async ver_resultado_experimento({ experiment_id }) {
+    const resultado = await verificarResultado(experiment_id);
+    return (
+      `Veredicto: ${resultado.veredicto} (${resultado.confianza}% confianza)\n` +
+      `${resultado.razon}\n` +
+      `Datos: $${resultado.datos?.spend || 0} gastados · ${resultado.datos?.leads || 0} leads\n` +
+      `Siguiente paso: ${resultado.siguiente_paso}`
+    );
   },
 };
 
