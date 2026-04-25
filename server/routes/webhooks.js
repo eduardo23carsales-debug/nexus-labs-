@@ -203,15 +203,19 @@ async function manejarComando(msg) {
   const notif  = (m, opts) => TelegramConnector.notificar(m, opts);
 
   switch (cmd) {
-    case '/menu':
-      await notif('⚙️ <b>Menú Nexus Labs</b>', {
+    case '/menu': {
+      const { kill_switch, safe_mode } = await SystemState.getStatus();
+      const estadoLabel = kill_switch ? '🔴 KILL SWITCH' : safe_mode ? '🟡 SAFE MODE' : '🟢 Operativo';
+      await notif(`⚙️ <b>Menú Nexus Labs</b>\nEstado: ${estadoLabel}`, {
         reply_markup: { inline_keyboard: [
-          [{ text: '📊 Reporte', callback_data: 'reporte' }, { text: '🧠 Analista', callback_data: 'analista' }],
-          [{ text: '🔍 Supervisor', callback_data: 'supervisor' }, { text: '📈 Ventas', callback_data: 'ventas' }],
-          [{ text: '🔑 Token Meta', callback_data: 'token' }],
+          [{ text: '📊 Reporte',      callback_data: 'reporte'    }, { text: '🧠 Analista',   callback_data: 'analista'   }],
+          [{ text: '🔍 Supervisor',   callback_data: 'supervisor' }, { text: '📈 Ventas',     callback_data: 'ventas'     }],
+          [{ text: '🔑 Token Meta',   callback_data: 'token'      }, { text: '🖥️ Status',     callback_data: 'status'     }],
+          [{ text: '🟡 Safe Mode',    callback_data: 'safe_mode'  }, { text: '🔴 Kill Switch', callback_data: 'kill_switch'}],
         ]}
       });
       break;
+    }
 
     case '/analista':
       await notif('🧠 Ejecutando analista...');
@@ -386,7 +390,7 @@ async function manejarCallback(cbq) {
     await llamarLead({ nombre: nombre || 'Lead', telefono: tel, segmento: 'mal-credito' });
   }
 
-  if (data === 'analista') { ejecutarAnalista().catch(console.error); }
+  if (data === 'analista')   { ejecutarAnalista().catch(console.error); }
   if (data === 'supervisor') { ejecutarSupervisor().catch(console.error); }
   if (data === 'ventas') {
     const conv = await LeadsDB.resumenConversiones();
@@ -395,6 +399,34 @@ async function manejarCallback(cbq) {
   if (data === 'token') {
     const res = await MetaConnector.validarToken();
     await TelegramConnector.notificar(res.ok ? `✅ Token válido` : `❌ Token inválido: ${esc(res.error)}`);
+  }
+  if (data === 'status') {
+    const { kill_switch, safe_mode } = await SystemState.getStatus();
+    await TelegramConnector.notificar(
+      `🖥️ <b>Estado del Sistema</b>\n` +
+      `${kill_switch ? '🔴' : '🟢'} Kill Switch: <b>${kill_switch ? 'ACTIVO' : 'inactivo'}</b>\n` +
+      `${safe_mode   ? '🟡' : '🟢'} Safe Mode:   <b>${safe_mode   ? 'ACTIVO' : 'inactivo'}</b>`
+    );
+  }
+  if (data === 'safe_mode') {
+    const { safe_mode } = await SystemState.getStatus();
+    if (safe_mode) {
+      await SystemState.desactivarSafeMode();
+      await TelegramConnector.notificar('🟢 <b>Safe mode desactivado</b> — sistema operativo completo.');
+    } else {
+      await SystemState.activarSafeMode();
+      await TelegramConnector.notificar('🟡 <b>Safe mode activado</b> — solo lectura. Toca el botón de nuevo para desactivar.');
+    }
+  }
+  if (data === 'kill_switch') {
+    const { kill_switch } = await SystemState.getStatus();
+    if (kill_switch) {
+      await SystemState.desactivarKillSwitch();
+      await TelegramConnector.notificar('🟢 <b>Sistema reactivado</b> — Jarvis y agentes operativos.');
+    } else {
+      await SystemState.activarKillSwitch();
+      await TelegramConnector.notificar('🔴 <b>KILL SWITCH ACTIVADO</b> — sistema detenido. Toca el botón de nuevo para reactivar.');
+    }
   }
 }
 
