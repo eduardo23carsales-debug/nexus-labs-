@@ -34,32 +34,36 @@ export const TOOL_DEFINITIONS = [
   // ── LLAMADAS ──────────────────────────────────────
   {
     name: 'llamar_con_contexto',
-    description: `Llama a un cliente con contexto específico y un objetivo claro.
-Usa esto cuando el usuario diga "llama a [nombre] que tiene [situación] y convéncelo de [objetivo]".
-Esta función genera un script 100% personalizado para esa llamada específica.
-Si el cliente ya existe en el CRM, carga su historial automáticamente.`,
+    description: `Llama a CUALQUIER número de teléfono con una misión específica — vender un producto, hacer una cita, comunicar algo, convencer de algo, cualquier objetivo.
+Úsalo cuando Eduardo diga cosas como:
+- "llama al 786-xxx-xxxx y convéncelo de comprar el curso"
+- "llama a Juan al [número] y dile que tiene hasta mañana para cerrar"
+- "llama a [número] y agenda una cita"
+- "llama a [nombre] y véndele el producto X"
+Sofía adapta su conversación 100% al objetivo que le indiques — no está limitada a autos ni citas.
+Si el nombre no se menciona, usa "cliente" como nombre.`,
     input_schema: {
       type: 'object',
       properties: {
-        telefono:   { type: 'string',  description: 'Número de teléfono del cliente' },
-        nombre:     { type: 'string',  description: 'Nombre completo del cliente' },
-        objetivo:   { type: 'string',  description: 'Objetivo específico de la llamada. Sé detallado: qué se quiere lograr, qué oferta hay, qué ventaja tiene el cliente.' },
-        nicho:      { type: 'string',  description: 'Nicho del cliente: lease-renewal, compra-carro, mal-credito, sin-credito, landing-page, marketing-digital, general, etc.' },
+        telefono:   { type: 'string',  description: 'Número de teléfono. Puede ser con guiones, espacios o sin ellos.' },
+        nombre:     { type: 'string',  description: 'Nombre de la persona. Si no se conoce, usa "cliente".' },
+        objetivo:   { type: 'string',  description: 'Misión exacta de la llamada. Sé MUY específico: qué lograr, qué producto/servicio ofrecer, qué argumento usar, qué resultado se espera.' },
+        nicho:      { type: 'string',  description: 'Contexto del cliente: venta-curso, cita-negocio, lease-renewal, compra-carro, marketing-digital, general, etc.' },
         datos_producto: {
           type: 'object',
-          description: 'Datos relevantes del producto o situación del cliente',
+          description: 'Datos del producto, servicio o situación que se va a presentar en la llamada',
           properties: {
-            tipo_auto:         { type: 'string', description: 'Modelo y año del vehículo actual' },
+            tipo_auto:         { type: 'string', description: 'Modelo y año del vehículo (si aplica)' },
             pago_actual:       { type: 'number', description: 'Pago mensual actual del cliente' },
             pago_nuevo:        { type: 'number', description: 'Nuevo pago que podemos ofrecer' },
-            fecha_vencimiento: { type: 'string', description: 'Fecha de vencimiento del contrato' },
-            credito:           { type: 'string', description: 'Descripción del crédito del cliente' },
+            fecha_vencimiento: { type: 'string', description: 'Fecha de vencimiento o deadline' },
+            credito:           { type: 'string', description: 'Situación crediticia del cliente' },
             anios_cliente:     { type: 'number', description: 'Años que lleva siendo cliente' },
           },
         },
-        contexto_extra: { type: 'string', description: 'Cualquier información adicional relevante para personalizar la llamada' },
+        contexto_extra: { type: 'string', description: 'Cualquier información adicional: precio del producto, descuento especial, urgencia, etc.' },
       },
-      required: ['telefono', 'nombre', 'objetivo'],
+      required: ['telefono', 'objetivo'],
     },
   },
 
@@ -393,9 +397,9 @@ Todo en un solo comando. Tarda ~10 minutos porque genera el producto completo.
 // ── Implementaciones ───────────────────────────────────
 export const TOOL_HANDLERS = {
 
-  async llamar_con_contexto({ telefono, nombre, objetivo, nicho, datos_producto, contexto_extra }) {
+  async llamar_con_contexto({ telefono, nombre = 'cliente', objetivo, nicho, datos_producto, contexto_extra }) {
     await llamarConContexto({ telefono, nombre, objetivo, nicho, datos_producto, contextoExtra: contexto_extra });
-    return `Llamada iniciada a ${nombre} (${telefono}) con contexto personalizado. Objetivo: ${objetivo}`;
+    return `Llamada iniciada a ${nombre} (${telefono}). Objetivo: ${objetivo}`;
   },
 
   async llamar_simple({ telefono, nombre, segmento = 'general' }) {
@@ -718,77 +722,100 @@ export const TOOL_HANDLERS = {
   async pipeline_completo({ presupuesto = 10, segmento = 'emprendedor-principiante' } = {}) {
     const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
 
-    // Paso 1: Investigar nicho
-    await notif('🔍 <b>Pipeline iniciado</b>\n\nPaso 1/4 — Buscando el mejor nicho...');
-    const nicho = await investigarNicho();
-
-    await notif(
-      `✅ <b>Nicho encontrado — Score ${nicho.score}/100</b>\n` +
-      `📦 ${nicho.nombre_producto}\n` +
-      `💵 Precio sugerido: $${nicho.precio}\n\n` +
-      `Paso 2/4 — Generando producto digital...`
-    );
-
-    // Paso 2: Generar producto HTML
-    const html = await generarProducto(nicho);
-
-    const fs   = await import('fs');
-    const path = await import('path');
-    const file = path.join('/tmp', `producto_${Date.now()}.html`);
-    fs.writeFileSync(file, html, 'utf8');
-
-    const exp = await ExperimentsDB.crear({
-      nicho:             nicho.nicho,
-      nombre:            nicho.nombre_producto,
-      tipo:              nicho.tipo,
-      precio:            nicho.precio,
-      contenidoProducto: html,
-    });
-
-    await notif(`✅ <b>Producto generado</b> (${(html.length / 1024).toFixed(0)} KB)\n\nPaso 3/4 — Creando imagen de portada con IA...`);
-
-    // Paso 3: Imagen de portada específica del producto
-    let imagenHash = null;
     try {
-      const promptImagen = [
-        `Professional digital product cover for "${nicho.nombre_producto}",`,
-        `target audience: ${nicho.subgrupo_latino || 'Hispanic entrepreneurs'},`,
-        `dark premium background, bold white title text, modern design,`,
-        `ebook or course mockup style, high quality marketing image`,
-      ].join(' ');
-      imagenHash = await generarYSubirImagen(promptImagen);
-      await notif(`✅ <b>Imagen de portada creada</b>\n\nPaso 4/4 — Lanzando campaña en Meta Ads con $${presupuesto}/día...`);
-    } catch (err) {
-      await notif(`⚠️ Imagen falló (${err.message}), usando imagen genérica del segmento.\n\nPaso 4/4 — Lanzando campaña...`);
-    }
-
-    // Paso 4: Crear campaña en Meta Ads con la imagen del producto
-    const campaña = await crearCampana(segmento, presupuesto, { imagenHash });
-
-    // Paso 5: Publicar con Stripe si está configurado
-    let stripeInfo = null;
-    if (StripeConnector.disponible()) {
-      await notif(`✅ <b>Campaña en Meta Ads activa</b>\n\nPaso 5/5 — Publicando landing page con Stripe...`);
+      // Paso 1: Investigar nicho
+      await notif('🔍 <b>Pipeline iniciado</b>\n\nPaso 1/4 — Buscando el mejor nicho...');
+      let nicho;
       try {
-        stripeInfo = await publicarConStripe(nicho, html, exp?.id);
+        nicho = await investigarNicho();
       } catch (err) {
-        await notif(`⚠️ Stripe falló: ${err.message}\nEl resto del pipeline está OK.`);
+        await notif(`❌ <b>Pipeline falló en Paso 1</b> (investigar nicho)\n<code>${esc(err.message)}</code>`);
+        throw err;
       }
+
+      await notif(
+        `✅ <b>Nicho encontrado — Score ${nicho.score}/100</b>\n` +
+        `📦 ${nicho.nombre_producto}\n` +
+        `💵 Precio sugerido: $${nicho.precio}\n\n` +
+        `Paso 2/4 — Generando producto digital...`
+      );
+
+      // Paso 2: Generar producto HTML
+      let html;
+      try {
+        html = await generarProducto(nicho);
+      } catch (err) {
+        await notif(`❌ <b>Pipeline falló en Paso 2</b> (generar producto)\n<code>${esc(err.message)}</code>`);
+        throw err;
+      }
+
+      const fs   = await import('fs');
+      const path = await import('path');
+      const file = path.join('/tmp', `producto_${Date.now()}.html`);
+      fs.writeFileSync(file, html, 'utf8');
+
+      const exp = await ExperimentsDB.crear({
+        nicho:             nicho.nicho,
+        nombre:            nicho.nombre_producto,
+        tipo:              nicho.tipo,
+        precio:            nicho.precio,
+        contenidoProducto: html,
+      });
+
+      await notif(`✅ <b>Producto generado</b> (${(html.length / 1024).toFixed(0)} KB)\n\nPaso 3/4 — Creando imagen de portada con IA...`);
+
+      // Paso 3: Imagen de portada (no fatal si falla)
+      let imagenHash = null;
+      try {
+        const promptImagen = [
+          `Professional digital product cover for "${nicho.nombre_producto}",`,
+          `target audience: ${nicho.subgrupo_latino || 'Hispanic entrepreneurs'},`,
+          `dark premium background, bold white title text, modern design,`,
+          `ebook or course mockup style, high quality marketing image`,
+        ].join(' ');
+        imagenHash = await generarYSubirImagen(promptImagen);
+        await notif(`✅ <b>Imagen de portada creada</b>\n\nPaso 4/4 — Lanzando campaña en Meta Ads con $${presupuesto}/día...`);
+      } catch (err) {
+        await notif(`⚠️ Imagen falló (${err.message}), usando imagen genérica del segmento.\n\nPaso 4/4 — Lanzando campaña...`);
+      }
+
+      // Paso 4: Crear campaña en Meta Ads
+      let campaña;
+      try {
+        campaña = await crearCampana(segmento, presupuesto, { imagenHash });
+      } catch (err) {
+        await notif(`❌ <b>Pipeline falló en Paso 4</b> (crear campaña Meta)\n<code>${esc(err.message)}</code>\n\nProducto ya guardado — puedes relanzar solo la campaña.`);
+        throw err;
+      }
+
+      // Paso 5: Publicar con Stripe si está configurado
+      let stripeInfo = null;
+      if (StripeConnector.disponible()) {
+        await notif(`✅ <b>Campaña en Meta Ads activa</b>\n\nPaso 5/5 — Publicando landing page con Stripe...`);
+        try {
+          stripeInfo = await publicarConStripe(nicho, html, exp?.id);
+        } catch (err) {
+          await notif(`⚠️ Stripe falló: ${err.message}\nEl resto del pipeline está OK.`);
+        }
+      }
+
+      await notif(
+        `🚀 <b>Pipeline completo</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📦 Producto: ${nicho.nombre_producto}\n` +
+        `💵 Precio: $${nicho.precio} | Score: ${nicho.score}/100\n` +
+        `📊 Campaña Meta: ${campaña.nombre}\n` +
+        `💰 Presupuesto: $${presupuesto}/día\n` +
+        `🖼️ Imagen: ${imagenHash ? 'portada del producto ✅' : 'genérica del segmento'}\n` +
+        (stripeInfo ? `🌐 Landing: ${stripeInfo.landing_url}\n💳 Stripe: ${stripeInfo.stripe_payment_link}\n` : `⚠️ Stripe no configurado — agrega STRIPE_SECRET_KEY\n`) +
+        `\nCuando alguien llena el formulario → llegan al CRM.\nCuando alguien paga en la landing → reciben el producto por email.\nDecisión automática a las 72h.`
+      );
+
+      return `Pipeline completo. Producto: "${nicho.nombre_producto}" | Campaña ID: ${campaña.campaign_id} | Landing: ${stripeInfo?.landing_url || 'sin Stripe'}`;
+
+    } catch (err) {
+      return `Pipeline abortado: ${err.message}`;
     }
-
-    await notif(
-      `🚀 <b>Pipeline completo</b>\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `📦 Producto: ${nicho.nombre_producto}\n` +
-      `💵 Precio: $${nicho.precio} | Score: ${nicho.score}/100\n` +
-      `📊 Campaña Meta: ${campaña.nombre}\n` +
-      `💰 Presupuesto: $${presupuesto}/día\n` +
-      `🖼️ Imagen: ${imagenHash ? 'portada del producto ✅' : 'genérica del segmento'}\n` +
-      (stripeInfo ? `🌐 Landing: ${stripeInfo.landing_url}\n💳 Stripe: ${stripeInfo.stripe_payment_link}\n` : `⚠️ Stripe no configurado — agrega STRIPE_SECRET_KEY\n`) +
-      `\nCuando alguien llena el formulario → llegan al CRM.\nCuando alguien paga en la landing → reciben el producto por email.\nDecisión automática a las 72h.`
-    );
-
-    return `Pipeline completo. Producto: "${nicho.nombre_producto}" | Campaña ID: ${campaña.campaign_id} | Landing: ${stripeInfo?.landing_url || 'sin Stripe'}`;
   },
 
   async rechazar_nicho({ nicho_json }) {

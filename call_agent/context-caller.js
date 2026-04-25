@@ -12,17 +12,18 @@ import ENV                        from '../config/env.js';
 function generarPromptContextual(cliente, objetivo, contextoExtra = '') {
   const datos = cliente.datos_producto || {};
 
-  const infocliente = [
+  const infoCliente = [
     `Nombre: ${cliente.nombre}`,
-    cliente.email              ? `Email: ${cliente.email}` : null,
-    datos.tipo_auto            ? `Vehículo actual: ${datos.tipo_auto}` : null,
-    datos.pago_actual          ? `Pago mensual actual: $${datos.pago_actual}` : null,
-    datos.pago_nuevo           ? `Nuevo pago posible: $${datos.pago_nuevo} (VENTAJA CLAVE)` : null,
-    datos.fecha_vencimiento    ? `Vencimiento del contrato: ${datos.fecha_vencimiento}` : null,
-    datos.credito              ? `Situación crediticia: ${datos.credito}` : null,
-    datos.anios_cliente        ? `Cliente hace ${datos.anios_cliente} años` : null,
-    cliente.notas              ? `Notas previas: ${cliente.notas}` : null,
-    contextoExtra              ? `Contexto adicional: ${contextoExtra}` : null,
+    cliente.email           ? `Email: ${cliente.email}` : null,
+    cliente.nicho           ? `Nicho/categoría: ${cliente.nicho}` : null,
+    datos.tipo_auto         ? `Vehículo actual: ${datos.tipo_auto}` : null,
+    datos.pago_actual       ? `Pago mensual actual: $${datos.pago_actual}` : null,
+    datos.pago_nuevo        ? `Nuevo pago posible: $${datos.pago_nuevo} (VENTAJA CLAVE)` : null,
+    datos.fecha_vencimiento ? `Vencimiento del contrato: ${datos.fecha_vencimiento}` : null,
+    datos.credito           ? `Situación crediticia: ${datos.credito}` : null,
+    datos.anios_cliente     ? `Cliente hace ${datos.anios_cliente} años` : null,
+    cliente.notas           ? `Notas previas: ${cliente.notas}` : null,
+    contextoExtra           ? `Contexto adicional: ${contextoExtra}` : null,
   ].filter(Boolean).join('\n');
 
   const historial = (cliente.historial || []).slice(0, 3);
@@ -32,38 +33,38 @@ function generarPromptContextual(cliente, objetivo, contextoExtra = '') {
       ).join('\n')
     : '';
 
-  return `Eres Sofía, coordinadora de citas. Eres experta en BDC automotriz.
+  return `Eres Sofía, asistente de Nexus Labs. Eres experta en comunicación, ventas consultivas y persuasión natural. Tu tono es cálido, confiado y profesional — como una persona de confianza, no una vendedora agresiva.
 
-DATOS DEL CLIENTE AL QUE LLAMAS:
-${infocliente}${historialTexto}
+DATOS DE LA PERSONA A LA QUE LLAMAS:
+${infoCliente}${historialTexto}
 
-OBJETIVO DE ESTA LLAMADA:
+OBJETIVO DE ESTA LLAMADA — ESTO ES TU ÚNICA MISIÓN:
 ${objetivo}
 
-INSTRUCCIONES ESPECÍFICAS PARA ESTA LLAMADA:
-1. Usa TODA la información anterior para personalizar cada frase — no suenes genérica
-2. Si tienes una ventaja concreta (como un pago más bajo), úsala como argumento central
-3. Si el cliente ya tuvo interacciones previas, referencíalas naturalmente
-4. El objetivo es AGENDAR UNA CITA — eso es éxito en esta llamada
+CÓMO EJECUTAR ESTE OBJETIVO:
+1. Adapta TODO lo que digas al objetivo específico de arriba — nada más importa
+2. Usa los datos del cliente para personalizar cada argumento
+3. Si tienes una ventaja concreta (ahorro, beneficio, urgencia), úsala como argumento central
+4. Si el cliente tuvo interacciones previas, referencíalas naturalmente
 5. Si no contesta: NO dejes mensaje de voz, simplemente termina la llamada
 
-APERTURA PERSONALIZADA:
-"¡Hola, habló con ${cliente.nombre}? Hola ${cliente.nombre.split(' ')[0]}, soy Sofía. Te llamo porque [razón específica basada en los datos arriba]..."
-
-MANEJO DE OBJECIONES — usa los datos reales:
-- Si menciona el pago actual → "Entiendo, y por eso te llamamos — podemos reducirte el pago de $${datos.pago_actual || '...'} a $${datos.pago_nuevo || 'menos'}."
-- Si dice que no tiene tiempo → propón hora específica basándote en el contexto
+MANEJO DE OBJECIONES:
+- Escucha completo antes de responder, nunca interrumpas
+- Valida la objeción antes de responder: "Entiendo perfectamente..."
+- Usa datos concretos del cliente para superar cada objeción
+- Si dice que no le interesa después de 2 intentos, cierra con gracia y termina
 
 REGLAS DE VOZ:
-- Español siempre aunque el cliente hable inglés
-- Números en palabras
-- Máximo 2 oraciones por turno`;
+- Español siempre, aunque el cliente hable inglés
+- Números en palabras: "treinta", "diez de la mañana"
+- Máximo 2 oraciones por turno, escucha más de lo que hablas
+- Usa el nombre del cliente 2-3 veces en momentos clave`;
 }
 
 // ── Llamar a un cliente CRM con contexto completo ────
 export async function llamarConContexto({ telefono, nombre, objetivo, contextoExtra, nicho, datos_producto }) {
   if (!ENV.VAPI_API_KEY || !ENV.VAPI_PHONE_ID) {
-    console.warn('[ContextCaller] VAPI no configurado');
+    await TelegramConnector.notificar('⚠️ <b>Llamada fallida:</b> VAPI no configurado (falta VAPI_API_KEY o VAPI_PHONE_NUMBER_ID en Railway)');
     return { ok: false, error: 'VAPI no configurado' };
   }
 
@@ -88,7 +89,7 @@ export async function llamarConContexto({ telefono, nombre, objetivo, contextoEx
       messages: [{ role: 'system', content: promptPersonalizado }],
     },
     firstMessage: `¡Hola! ¿Hablo con ${nombre}?`,
-    serverUrl:    SOFIA_CONFIG.serverUrl,
+    serverUrl: SOFIA_CONFIG.serverUrl,
   };
 
   try {
@@ -105,16 +106,20 @@ export async function llamarConContexto({ telefono, nombre, objetivo, contextoEx
       `📞 <b>Llamando a ${esc(nombre)}</b>\n` +
       `📱 ${esc(telefono)}\n` +
       `🎯 ${esc(objetivo)}\n` +
-      `🤖 Sofía con contexto personalizado`
+      `🤖 Sofía en línea`
     );
 
     console.log(`[ContextCaller] Llamada iniciada: ${nombre} — ${call.id}`);
     return { ok: true, callId: call.id, clienteId: cliente.client_id };
 
   } catch (err) {
-    const msg = err.response?.data?.message || err.message;
+    const msg = err.response?.data?.message || err.response?.data?.error || err.message;
     console.error(`[ContextCaller] Error:`, msg);
-    await TelegramConnector.notificar(`⚠️ <b>Error al llamar a ${esc(nombre)}:</b>\n<code>${esc(msg)}</code>`);
+    await TelegramConnector.notificar(
+      `❌ <b>Llamada fallida a ${esc(nombre)} (${esc(telefono)})</b>\n` +
+      `🎯 Objetivo: ${esc(objetivo)}\n` +
+      `⚠️ Error: <code>${esc(msg)}</code>`
+    );
     return { ok: false, error: msg };
   }
 }
