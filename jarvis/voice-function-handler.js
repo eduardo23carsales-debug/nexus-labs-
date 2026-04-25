@@ -36,17 +36,22 @@ export async function manejarFuncionVoz(body) {
   }
 }
 
-// Limpiar texto HTML/Markdown para que suene bien en voz
+// Limpiar texto HTML/Markdown/emojis para que suene bien en voz
 function limpiarParaVoz(texto) {
   return texto
-    .replace(/<[^>]+>/g, '')          // quitar HTML
-    .replace(/━+/g, '—')              // separadores
-    .replace(/[🔥🌡❄️📊💵👥🏆📈📉⭐✅❌⚠️🚀⏸📞🔍🤖]/gu, '') // quitar emojis
-    .replace(/\*\*/g, '')             // quitar markdown bold
-    .replace(/`[^`]+`/g, '')          // quitar code
-    .replace(/\n{3,}/g, '\n\n')       // máximo 2 saltos de línea
+    .replace(/<[^>]+>/g, '')                          // quitar HTML tags
+    .replace(/━+/g, '—')                              // separadores decorativos
+    .replace(/[\u{1F300}-\u{1FFFF}]/gu, '')           // quitar todos los emojis (rangos Unicode)
+    .replace(/[\u{2300}-\u{27BF}]/gu, '')             // técnicos, geométricos, símbolos, dingbats
+    .replace(/[\u{2B00}-\u{2BFF}]/gu, '')             // símbolos y flechas misceláneas
+    .replace(/[#️⃣*️⃣]/gu, '')                          // keycap emojis
+    .replace(/️/g, '')                           // variation selectors (residuo de ⚠️ ⏸️ etc)
+    .replace(/\*\*/g, '')                             // quitar markdown bold
+    .replace(/`[^`]+`/g, '')                          // quitar code inline
+    .replace(/\n{3,}/g, '\n\n')                       // máximo 2 saltos de línea seguidos
+    .replace(/  +/g, ' ')                             // colapsar espacios dobles
     .trim()
-    .slice(0, 800);                   // máximo 800 chars para no saturar la voz
+    .slice(0, 800);                                   // máximo 800 chars para no saturar la voz
 }
 
 export default manejarFuncionVoz;
