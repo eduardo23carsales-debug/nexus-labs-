@@ -428,6 +428,14 @@ async function manejarCallback(cbq) {
     }
   }
 
+  if (data === 'cancelar_pipeline') {
+    global._cancelarPipeline = true;
+    await TelegramConnector.notificar(
+      `⛔ <b>Pipeline cancelado</b>\n\n¿Por qué lo detuviste? Cuéntame para que no repita el mismo error.`
+    );
+    return;
+  }
+
   if (data.startsWith('cerrado:')) {
     const tel = data.split(':')[1];
     await LeadsDB.marcarCerrado(tel);

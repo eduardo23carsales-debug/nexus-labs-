@@ -502,6 +502,22 @@ Consulta métricas reales (CPL, leads, CTR) y emite veredicto: validado, rechaza
       required: ['experiment_id'],
     },
   },
+
+  {
+    name: 'relanzar_producto',
+    description: `Busca un producto digital YA CREADO por nombre o ID y lo publica con Stripe + campaña en Meta Ads.
+ÚSALO SIEMPRE cuando Eduardo diga "go a [nombre del producto]", "lanza el que ya estaba", "publica el experimento X", "usa el producto existente", "relanza [nombre]".
+NO uses pipeline_completo si Eduardo menciona un producto específico que ya existe — usa este primero.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial del producto o ID numérico del experimento' },
+        presupuesto: { type: 'number', description: 'Presupuesto diario Meta Ads en USD. Default: 10' },
+        segmento:    { type: 'string', description: 'Segmento Meta Ads. Default: emprendedor-principiante' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
 ];
 
 // ── Implementaciones ───────────────────────────────────
@@ -832,8 +848,63 @@ export const TOOL_HANDLERS = {
     return `Experimentos (${estado}):\n${lineas.join('\n')}`;
   },
 
-  async pipeline_completo({ presupuesto = 10, segmento = 'emprendedor-principiante' } = {}) {
+  async relanzar_producto({ nombre_o_id, presupuesto = 10, segmento = 'emprendedor-principiante' }) {
     const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    // Buscar experimento por ID o nombre
+    let exp = null;
+    const id = parseInt(nombre_o_id);
+    if (!isNaN(id)) {
+      exp = await ExperimentsDB.obtener(id);
+    }
+    if (!exp) {
+      const lista = await ExperimentsDB.listar('activo');
+      exp = lista.find(e => e.nombre.toLowerCase().includes(nombre_o_id.toLowerCase()));
+    }
+    if (!exp) {
+      return `No encontré un producto con "${nombre_o_id}". Usa ver_experimentos para ver los disponibles.`;
+    }
+
+    await notif(`🔄 <b>Relanzando "${esc(exp.nombre)}"</b> (experimento #${exp.id})\n\nPaso 1/2 — Lanzando campaña Meta Ads...`);
+
+    let campaña;
+    try {
+      campaña = await crearCampana(segmento, presupuesto, {});
+    } catch (err) {
+      return `❌ Meta Ads falló: ${err.message}\nEl producto #${exp.id} sigue guardado — intenta de nuevo cuando el token esté listo.`;
+    }
+
+    if (!StripeConnector.disponible()) {
+      return `✅ Campaña Meta Ads activa — "${campaña.nombre}"\n⚠️ Stripe no configurado — agrega STRIPE_SECRET_KEY para generar la landing page.`;
+    }
+
+    await notif(`✅ Campaña Meta Ads creada\n\nPaso 2/2 — Publicando landing page con Stripe...`);
+
+    const nichoBasico = {
+      nombre_producto:      exp.nombre,
+      nicho:                exp.nicho || exp.nombre,
+      tipo:                 exp.tipo || 'guia_pdf',
+      precio:               exp.precio || 27,
+      problema_que_resuelve: exp.nombre,
+      subtitulo:            '',
+      cliente_ideal:        'Emprendedor hispano en USA',
+      quick_win:            'Resultados desde el primer día',
+      puntos_de_venta:      [],
+    };
+
+    try {
+      const stripeInfo = await publicarConStripe(nichoBasico, null, exp.id);
+      return `✅ Relanzado exitosamente:\n📦 ${exp.nombre}\n🌐 Landing: ${stripeInfo.landing_url}\n💳 Stripe: ${stripeInfo.stripe_payment_link}\n📊 Campaña: ${campaña.nombre}`;
+    } catch (err) {
+      return `✅ Campaña Meta Ads activa. Stripe falló: ${err.message}`;
+    }
+  },
+
+  async pipeline_completo({ presupuesto = 10, segmento = 'emprendedor-principiante' } = {}) {
+    global._cancelarPipeline = false;
+    const btnCancelar = TelegramConnector.teclado([[{ text: '🛑 Cancelar pipeline', callback_data: 'cancelar_pipeline' }]]);
+    const notif = (m) => TelegramConnector.notificar(m, btnCancelar).catch(() => {});
+    const checkCancelado = () => { if (global._cancelarPipeline) throw new Error('PIPELINE_CANCELADO'); };
 
     try {
       // Paso 1: Investigar nicho
@@ -864,6 +935,7 @@ export const TOOL_HANDLERS = {
         console.warn('[Pipeline] No pudo crear proyecto:', err.message);
       }
 
+      checkCancelado();
       await notif(
         `✅ <b>Nicho encontrado — Score ${nicho.score}/100</b>\n` +
         `📦 ${nicho.nombre_producto}\n` +
@@ -900,6 +972,7 @@ export const TOOL_HANDLERS = {
         await ProjectsDB.actualizarEstado(projectId, 'testing', 'pipeline', 'producto generado').catch(() => {});
       }
 
+      checkCancelado();
       await notif(`✅ <b>Producto generado</b> (${(html.length / 1024).toFixed(0)} KB)\n\nPaso 3/4 — Creando imagen de portada con IA...`);
 
       // Paso 3: Imagen de portada (no fatal si falla)
@@ -917,6 +990,7 @@ export const TOOL_HANDLERS = {
         await notif(`⚠️ Imagen falló (${err.message}), usando imagen genérica del segmento.\n\nPaso 4/4 — Lanzando campaña...`);
       }
 
+      checkCancelado();
       // Paso 4: Crear campaña en Meta Ads
       let campaña;
       try {
@@ -961,6 +1035,11 @@ export const TOOL_HANDLERS = {
       return `Pipeline completo. Producto: "${nicho.nombre_producto}" | Campaña ID: ${campaña.campaign_id} | Landing: ${stripeInfo?.landing_url || 'sin Stripe'}`;
 
     } catch (err) {
+      if (err.message === 'PIPELINE_CANCELADO') {
+        global._cancelarPipeline = false;
+        TelegramConnector.notificar('⛔ <b>Pipeline detenido</b>\n\n¿Por qué lo cancelaste? Cuéntame para no repetir el error.').catch(() => {});
+        return 'Pipeline cancelado por el usuario.';
+      }
       return `Pipeline abortado: ${err.message}`;
     }
   },
