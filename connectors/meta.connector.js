@@ -22,12 +22,22 @@ export const MetaConnector = {
   },
 
   async post(endpoint, body = {}) {
-    const { data } = await axios.post(
-      `${API_BASE}${endpoint}`,
-      { ...body, access_token: token() },
-      { timeout: 15000 }
-    );
-    return data;
+    try {
+      const { data } = await axios.post(
+        `${API_BASE}${endpoint}`,
+        { ...body, access_token: token() },
+        { timeout: 15000 }
+      );
+      return data;
+    } catch (err) {
+      const metaError = err.response?.data?.error;
+      if (metaError) {
+        const detalle = `Meta API ${err.response.status} — ${metaError.message} (code: ${metaError.code}, subcode: ${metaError.error_subcode || 'n/a'})`;
+        console.error(`[Meta] Error en ${endpoint}:`, detalle);
+        throw new Error(detalle);
+      }
+      throw err;
+    }
   },
 
   async postForm(endpoint, formData) {
