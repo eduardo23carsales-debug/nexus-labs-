@@ -4,6 +4,14 @@
 
 import ENV from '../config/env.js';
 
+// Elimina surrogates sueltos que hacen explotar JSON.stringify al mandarse a la API
+function limpiarUnicode(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')   // high surrogate sin pair
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');  // low surrogate sin pair
+}
+
 // Singletons — evita re-importar el SDK y re-crear el cliente en cada llamada
 let _client     = null;
 let _clientLong = null;
@@ -32,8 +40,8 @@ export const AnthropicConnector = {
     const msg = await client.messages.create({
       model,
       max_tokens: maxTokens,
-      ...(system && { system }),
-      messages: [{ role: 'user', content: prompt }],
+      ...(system && { system: limpiarUnicode(system) }),
+      messages: [{ role: 'user', content: limpiarUnicode(prompt) }],
     });
     return msg.content[0].text.trim();
   },
@@ -48,7 +56,8 @@ export const AnthropicConnector = {
   // Generación larga con continuación automática si Claude se corta
   async completarConContinuacion({ system, prompt, model = 'claude-sonnet-4-6', maxTokens = 6000, maxIter = 8 }) {
     const client = await getClientLong();
-    const messages = [{ role: 'user', content: prompt }];
+    const messages = [{ role: 'user', content: limpiarUnicode(prompt) }];
+    system = limpiarUnicode(system);
     let textoTotal = '';
 
     for (let iter = 0; iter < maxIter; iter++) {

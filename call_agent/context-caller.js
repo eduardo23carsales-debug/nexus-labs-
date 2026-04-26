@@ -43,7 +43,8 @@ function generarPromptContextual(cliente, objetivo, contextoExtra = '') {
     contextoExtra           ? `Contexto adicional: ${contextoExtra}` : null,
   ].filter(Boolean).join('\n');
 
-  const historial = (cliente.historial || []).slice(0, 3);
+  const raw = cliente.historial;
+  const historial = (Array.isArray(raw) ? raw : []).slice(0, 3);
   const historialTexto = historial.length
     ? '\n\nINTERACCIONES ANTERIORES:\n' + historial.map(h =>
         `- ${new Date(h.fecha).toLocaleDateString('es-US')}: ${h.tipo} — ${h.resultado || h.notas}`

@@ -24,7 +24,17 @@ export const ConversationDB = {
     let trimmed = messages;
     if (trimmed.length > MAX_MSG) {
       trimmed = trimmed.slice(trimmed.length - MAX_MSG);
-      while (trimmed.length > 0 && trimmed[0].role !== 'user') trimmed = trimmed.slice(1);
+    }
+    // Avanzar hasta un user message de texto limpio — un user con tool_results
+    // no puede iniciar conversación porque su tool_use correspondiente fue cortado
+    while (trimmed.length > 0) {
+      const first = trimmed[0];
+      const esUserLimpio = first.role === 'user' && (
+        typeof first.content === 'string' ||
+        (Array.isArray(first.content) && !first.content.some(b => b.type === 'tool_result'))
+      );
+      if (esUserLimpio) break;
+      trimmed = trimmed.slice(1);
     }
     await query(`
       INSERT INTO conversations (chat_id, messages, ultima_actividad)
