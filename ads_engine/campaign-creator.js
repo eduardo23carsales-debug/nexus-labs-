@@ -122,6 +122,22 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
 
+  // Verificar ad account antes de crear
+  try {
+    const acct = await MetaConnector.get(`/${ENV.META_AD_ACCOUNT}`, {
+      fields: 'id,name,account_status,disable_reason,currency',
+    });
+    const STATUS = { 1: 'ACTIVA', 2: 'DESHABILITADA', 3: 'SIN_PAGO', 7: 'SIN_PAGO', 9: 'PENDIENTE_REVISION' };
+    const estado = STATUS[acct.account_status] || `estado_${acct.account_status}`;
+    console.log(`[AdsEngine] Cuenta "${acct.name}" — ${estado} (${acct.currency})`);
+    if (acct.account_status !== 1) {
+      throw new Error(`Ad account "${acct.name}" no está activa — estado: ${estado}. Verifica el método de pago en Meta Business Manager.`);
+    }
+  } catch (err) {
+    if (err.message.includes('Ad account')) throw err;
+    throw new Error(`No se pudo verificar el ad account ${ENV.META_AD_ACCOUNT}: ${err.message}`);
+  }
+
   const ts     = Date.now();
   const nombre = `Nexus Labs —${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
 
