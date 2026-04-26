@@ -153,9 +153,14 @@ REGLAS DE ORO:
     }]
   },
   voice: {
-    provider: 'cartesia',
-    voiceId:  '846d6cb0-2301-48b6-9683-48f5618ea2f6',
-    model:    'sonic-3',
+    provider:                 '11labs',
+    voiceId:                  'KDG2CWzkFgcZz4Vqbu8m',
+    model:                    'eleven_turbo_v2_5',
+    stability:                0.55,
+    similarityBoost:          0.80,
+    style:                    0.10,
+    useSpeakerBoost:          true,
+    optimizeStreamingLatency: 2,
   },
   firstMessageMode: 'assistant-waits-for-user',
   transcriber: {
