@@ -53,10 +53,11 @@ export function iniciarScheduler() {
     }
   }, { timezone: 'America/New_York' });
 
-  // Secuencias de email — cada hora (carritos abandonados + post-compra)
+  // Secuencias de email — cada hora (entrega de productos + carritos abandonados + post-compra)
   cron.schedule('0 * * * *', async () => {
     if (!ResendConnector.disponible()) return;
     try {
+      await ResendConnector.procesarPagosNuevos();
       await ResendConnector.procesarCarritosAbandonados();
       await ResendConnector.procesarSecuenciaPostCompra();
     } catch (e) {

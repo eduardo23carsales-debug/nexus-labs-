@@ -20,6 +20,8 @@ import { manejarFuncionVoz }       from '../../jarvis/voice-function-handler.js'
 import { JARVIS_VOICE_CONFIG }     from '../../jarvis/jarvis-voice.config.js';
 import { VapiConnector }           from '../../connectors/vapi.connector.js';
 import { procesarVentaHotmart }    from '../../connectors/hotmart.connector.js';
+import { StripeConnector }         from '../../connectors/stripe.connector.js';
+import { ResendConnector }         from '../../connectors/resend.connector.js';
 import { SystemState }             from '../../config/system-state.js';
 import { ProjectsDB }              from '../../crm/projects.db.js';
 import ENV                         from '../../config/env.js';
@@ -452,5 +454,93 @@ async function manejarCallback(cbq) {
     }
   }
 }
+
+// ── Stripe webhook — entrega inmediata del producto ───
+router.post('/stripe/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let evento;
+  try {
+    evento = await StripeConnector.construirEvento(req.body, sig);
+  } catch (err) {
+    console.error('[Stripe Webhook] Firma inválida:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (evento.type === 'checkout.session.completed') {
+    const sesion = evento.data.object;
+    if (sesion.payment_status !== 'paid') return res.sendStatus(200);
+
+    const emailCliente  = sesion.customer_details?.email;
+    const nombreCliente = sesion.customer_details?.name;
+    if (!emailCliente) return res.sendStatus(200);
+
+    res.sendStatus(200); // responder a Stripe antes de procesar
+
+    try {
+      const { query } = await import('../../config/database.js');
+
+      // Evitar doble entrega
+      const { rows: yaEntregado } = await query(
+        'SELECT id FROM customers WHERE email = $1 AND stripe_payment_id = $2 LIMIT 1',
+        [emailCliente, sesion.payment_intent || '']
+      );
+      if (yaEntregado.length) return;
+
+      // Buscar el experimento por payment_link
+      const { rows: exps } = await query(
+        `SELECT * FROM experiments WHERE stripe_payment_link IS NOT NULL ORDER BY creado_en DESC LIMIT 20`
+      );
+      const exp = exps.find(e =>
+        sesion.payment_link && e.stripe_payment_link?.includes(sesion.payment_link)
+      ) || exps[0];
+
+      if (!exp) {
+        console.warn('[Stripe Webhook] No se encontró experimento para el pago', sesion.id);
+        return;
+      }
+
+      const dominio    = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+      const productoUrl = exp.landing_slug ? `${dominio}/p/${exp.landing_slug}` : null;
+
+      await ResendConnector.entregarProducto({
+        para:            emailCliente,
+        nombreCliente,
+        nombreProducto:  exp.nombre,
+        contenido:       exp.contenido_producto || '',
+        productoUrl,
+        stripePaymentId: sesion.payment_intent,
+      });
+
+      await query(
+        `INSERT INTO customers (email, nombre, experiment_id, producto, revenue, stripe_customer_id, stripe_payment_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (email) DO NOTHING`,
+        [emailCliente, nombreCliente || null, exp.id, exp.nombre,
+         (sesion.amount_total || 0) / 100, sesion.customer || null, sesion.payment_intent || null]
+      );
+
+      await query(
+        `UPDATE experiments SET metricas = jsonb_set(
+          COALESCE(metricas,'{}'), '{ventas}',
+          (COALESCE((metricas->>'ventas')::int,0)+1)::text::jsonb
+        ), actualizado_en = NOW() WHERE id = $1`, [exp.id]
+      );
+
+      await TelegramConnector.notificar(
+        `💰 <b>Venta confirmada</b>\n` +
+        `📦 ${esc(exp.nombre)}\n` +
+        `💵 $${((sesion.amount_total || 0) / 100).toFixed(2)}\n` +
+        `📧 ${esc(emailCliente)}\n` +
+        `✅ Producto entregado por email`
+      );
+
+      console.log(`[Stripe Webhook] Producto entregado a ${emailCliente}`);
+    } catch (err) {
+      console.error('[Stripe Webhook] Error al entregar producto:', err.message);
+    }
+    return;
+  }
+
+  res.sendStatus(200);
+});
 
 export default router;

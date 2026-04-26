@@ -114,10 +114,11 @@ Estructura HTML EXACTA:
 
 Llena TODOS los [PLACEHOLDERS] con contenido real. Devuelve SOLO el HTML final.`;
 
-  let html = await AnthropicConnector.preguntar(prompt,
-    'Eres experto en landing pages de alta conversión para el mercado hispano de USA.',
-    6000
-  );
+  let html = await AnthropicConnector.completar({
+    system:    'Eres experto en landing pages de alta conversión para el mercado hispano de USA.',
+    prompt,
+    maxTokens: 6000,
+  });
 
   html = html.replace(/```html\n?/g, '').replace(/```\n?/g, '').trim();
 
