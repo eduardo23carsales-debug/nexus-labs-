@@ -32,9 +32,13 @@ AUDIENCIA — usa "Latinos en EE.UU." por defecto. Solo subgrupo específico cua
 producto lo requiere por naturaleza (documentos/inmigración/etc).`;
 
 // ── Paso 1: Buscar candidatos ────────────────────────
-async function buscarCandidatos(ganadoresTexto, blacklistTexto, nichosYaVistos = []) {
+async function buscarCandidatos(ganadoresTexto, blacklistTexto, nichosYaVistos = [], enfoque = null) {
   const evitar = nichosYaVistos.length
     ? `\nNICHOS YA EVALUADOS ESTA RONDA — NO REPETIR:\n${nichosYaVistos.join('\n')}`
+    : '';
+
+  const enfoqueBloque = enfoque
+    ? `\nENFOQUE SOLICITADO POR EDUARDO: "${enfoque}"\nTodos los candidatos deben estar dentro de o relacionados con este tema. No salgas de este enfoque aunque el score sea menor.\n`
     : '';
 
   const resultado = await AnthropicConnector.completarJSONConReintentos({
@@ -43,7 +47,7 @@ async function buscarCandidatos(ganadoresTexto, blacklistTexto, nichosYaVistos =
     system:    SYSTEM,
     prompt:    `Necesito ${CANDIDATOS_POR_RONDA} nichos DISTINTOS para productos digitales para el mercado hispano.
 Fecha actual: ${new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}.
-
+${enfoqueBloque}
 NICHOS QUE YA FUNCIONARON (replicar/mejorar):
 ${ganadoresTexto}
 
@@ -121,8 +125,8 @@ Devuelve JSON:
 }
 
 // ── Función principal exportada ──────────────────────
-export async function investigarNicho() {
-  console.log('[Researcher] Iniciando búsqueda multi-candidato...');
+export async function investigarNicho(enfoque = null) {
+  console.log(`[Researcher] Iniciando búsqueda${enfoque ? ` — enfoque: "${enfoque}"` : ''}...`);
 
   const [ganadores, blacklist] = await Promise.all([
     ProductsMemoryDB.getGanadores('digital'),
@@ -144,7 +148,7 @@ export async function investigarNicho() {
 
     let candidatos = [];
     try {
-      candidatos = await buscarCandidatos(ganadoresTexto, blacklistTexto, nichosYaVistos);
+      candidatos = await buscarCandidatos(ganadoresTexto, blacklistTexto, nichosYaVistos, enfoque);
     } catch (err) {
       console.warn(`[Researcher] Ronda ${ronda}: error — ${err.message}`);
       continue;

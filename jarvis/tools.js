@@ -301,10 +301,14 @@ Primero muestra el resumen del plan y luego lo ejecuta.`,
     description: `Busca el nicho más rentable para lanzar un producto digital ahora mismo.
 El sistema analiza el mercado hispano de USA y América Latina, evalúa múltiples candidatos con scoring 0-100,
 y devuelve el mejor con todos los detalles: nombre del producto, precio sugerido, cliente ideal, quick win.
-Úsalo cuando Eduardo diga "busca un nicho", "qué producto digital podemos lanzar", "busca oportunidad".`,
+Si Eduardo da una idea o tema específico (ej: "productos naturales", "fitness", "immigración"), úsalo como enfoque.
+Si no da ninguna idea, busca el mejor nicho disponible de forma autónoma.
+Úsalo cuando Eduardo diga "busca un nicho", "investiga [tema]", "qué producto digital podemos lanzar", "busca oportunidad de [tema]".`,
     input_schema: {
       type: 'object',
-      properties: {},
+      properties: {
+        enfoque: { type: 'string', description: 'Tema o idea específica de Eduardo para enfocar la búsqueda (opcional). Ej: "productos naturales", "fitness para latinos", "crédito e inmigración"' },
+      },
     },
   },
 
@@ -710,9 +714,12 @@ export const TOOL_HANDLERS = {
 
   // ── MOTOR DE PRODUCTOS DIGITALES ──────────────────
 
-  async investigar_nicho() {
-    await TelegramConnector.notificar('🔍 <b>Researcher:</b> Buscando el mejor nicho para el mercado hispano...').catch(() => {});
-    const nicho = await investigarNicho();
+  async investigar_nicho({ enfoque } = {}) {
+    const msg = enfoque
+      ? `🔍 <b>Researcher:</b> Buscando nichos de <b>${esc(enfoque)}</b> para el mercado hispano...`
+      : '🔍 <b>Researcher:</b> Buscando el mejor nicho para el mercado hispano...';
+    await TelegramConnector.notificar(msg).catch(() => {});
+    const nicho = await investigarNicho(enfoque || null);
     await TelegramConnector.notificar(
       `✅ <b>Nicho encontrado — Score ${nicho.score}/100</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
