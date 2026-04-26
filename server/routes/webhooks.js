@@ -456,7 +456,7 @@ async function manejarCallback(cbq) {
 }
 
 // ── Stripe webhook — entrega inmediata del producto ───
-router.post('/stripe/webhook', async (req, res) => {
+router.post('/webhook/stripe', async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let evento;
   try {

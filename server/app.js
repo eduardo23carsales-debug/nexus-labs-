@@ -17,7 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
 // El webhook de Stripe necesita el body raw (sin parsear) para verificar la firma
-app.use('/stripe/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/webhook/stripe', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../public')));
