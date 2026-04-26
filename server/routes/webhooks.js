@@ -10,7 +10,8 @@ import { LeadsDB }               from '../../memory/leads.db.js';
 import { PlansDB }               from '../../memory/plans.db.js';
 import { ejecutarPlan }          from '../../agents/ejecutor/index.js';
 import { ejecutarAnalista }      from '../../agents/analista/index.js';
-import { ejecutarSupervisor }    from '../../agents/supervisor/index.js';
+import { ejecutarSupervisor, enviarResumenSemanal } from '../../agents/supervisor/index.js';
+import { SupervisorMemory }       from '../../agents/supervisor/memory.js';
 import { MetaConnector }         from '../../connectors/meta.connector.js';
 import { CampaignManager }       from '../../ads_engine/campaign-manager.js';
 import { TelegramConnector, esc } from '../../connectors/telegram.connector.js';
@@ -388,6 +389,42 @@ async function manejarCallback(cbq) {
       await TelegramConnector.notificar(`📈 Campaña escalada a $${nuevo}/día`);
     } catch (e) {
       await TelegramConnector.notificar(`❌ Error: ${esc(e.message)}`);
+    }
+  }
+
+  // Supervisor IA — aprobación de decisión pendiente
+  if (data.startsWith('sv_aprobar:')) {
+    const decisionId = parseInt(data.split(':')[1], 10);
+    const dec = await SupervisorMemory.obtenerPorId(decisionId);
+    if (!dec) {
+      await TelegramConnector.notificar('⚠️ Decisión no encontrada o ya procesada.');
+      return;
+    }
+    try {
+      if (dec.decision === 'pausar') {
+        await CampaignManager.pausar(dec.campana_id);
+      } else if ((dec.decision === 'escalar' || dec.decision === 'reducir') && dec.nuevo_presupuesto) {
+        await CampaignManager.cambiarPresupuesto(dec.campana_id, parseFloat(dec.nuevo_presupuesto));
+      }
+      await SupervisorMemory.marcarResultado(decisionId, 'aprobado');
+      const icono = dec.decision === 'pausar' ? '⏸' : dec.decision === 'escalar' ? '📈' : '📉';
+      await TelegramConnector.notificar(
+        `${icono} <b>Aprobado y ejecutado</b>\n${esc(dec.campana_nombre)}\n${esc(dec.razon)}`
+      );
+    } catch (err) {
+      await SupervisorMemory.marcarResultado(decisionId, 'error_ejecucion');
+      await TelegramConnector.notificar(`❌ Error ejecutando: ${esc(err.message)}`);
+    }
+  }
+
+  if (data.startsWith('sv_rechazar:')) {
+    const decisionId = parseInt(data.split(':')[1], 10);
+    const dec = await SupervisorMemory.obtenerPorId(decisionId);
+    if (dec) {
+      await SupervisorMemory.marcarResultado(decisionId, 'rechazado');
+      await TelegramConnector.notificar(
+        `❌ <b>Rechazado</b> — ${esc(dec.campana_nombre)}\nSupervisor aprenderá de esta corrección.`
+      );
     }
   }
 

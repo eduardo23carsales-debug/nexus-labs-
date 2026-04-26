@@ -4,7 +4,7 @@
 
 import cron from 'node-cron';
 import { ejecutarAnalista }    from '../agents/analista/index.js';
-import { ejecutarSupervisor }  from '../agents/supervisor/index.js';
+import { ejecutarSupervisor, enviarResumenSemanal } from '../agents/supervisor/index.js';
 import { revisarExperimentos } from '../scaling_agent/index.js';
 import { MetaConnector }       from '../connectors/meta.connector.js';
 import { TelegramConnector }   from '../connectors/telegram.connector.js';
@@ -44,6 +44,15 @@ export function iniciarScheduler() {
     }
   }, { timezone: 'America/New_York' });
 
+  // Supervisor — resumen semanal de aprendizaje (lunes 9AM ET)
+  cron.schedule('0 9 * * 1', async () => {
+    try {
+      await enviarResumenSemanal();
+    } catch (e) {
+      console.error('[Scheduler] Error en resumen semanal Supervisor:', e.message);
+    }
+  }, { timezone: 'America/New_York' });
+
   // Scaling Agent — revisar experimentos cada 6 horas
   cron.schedule('0 */6 * * *', async () => {
     try {
@@ -65,7 +74,7 @@ export function iniciarScheduler() {
     }
   }, { timezone: 'America/New_York' });
 
-  console.log('[Scheduler] Jobs iniciados: token-check (00h), analista (8h), supervisor (cada 4h), scaling (cada 6h), emails (cada 1h)');
+  console.log('[Scheduler] Jobs iniciados: token-check (00h), analista (8h), supervisor (cada 4h + resumen lunes 9h), scaling (cada 6h), emails (cada 1h)');
 }
 
 export default iniciarScheduler;
