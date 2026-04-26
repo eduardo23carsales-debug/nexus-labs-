@@ -147,7 +147,6 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
     objective:              'OUTCOME_LEADS',
     status:                 'ACTIVE',
     special_ad_categories:  [],
-    bid_strategy:           'LOWEST_COST_WITHOUT_CAP',
   });
 
   // 2. Asset (imagen override > video > foto > DALL-E)
@@ -241,7 +240,6 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia)
     objective:             'OUTCOME_TRAFFIC',
     status:                'ACTIVE',
     special_ad_categories: [],
-    bid_strategy:          'LOWEST_COST_WITHOUT_CAP',
   });
 
   // 2. Asset (video > foto > DALL-E)
