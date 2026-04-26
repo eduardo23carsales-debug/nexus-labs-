@@ -72,7 +72,7 @@ export const ResendConnector = {
 
       try {
         const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
-        const productoUrl = exp.landing_slug ? `${dominio}/p/${exp.landing_slug}` : null;
+        const productoUrl = exp.landing_slug ? `${dominio}/acceso/${exp.landing_slug}` : null;
 
         await this.entregarProducto({
           para:            emailCliente,

@@ -35,7 +35,7 @@ router.get('/gracias', (req, res) => {
 </html>`);
 });
 
-// ── Servir landing page por slug ──────────────────
+// ── Servir landing page de ventas por slug ────────
 router.get('/p/:slug', async (req, res) => {
   try {
     const { rows } = await query(
@@ -49,6 +49,25 @@ router.get('/p/:slug', async (req, res) => {
     res.send(rows[0].landing_html);
   } catch (err) {
     console.error('[Landings] Error sirviendo landing:', err.message);
+    res.status(500).send('Error interno.');
+  }
+});
+
+// ── Servir producto digital al comprador ──────────
+// Esta es la URL que va en el email post-compra
+router.get('/acceso/:slug', async (req, res) => {
+  try {
+    const { rows } = await query(
+      'SELECT contenido_producto, nombre FROM experiments WHERE landing_slug = $1 LIMIT 1',
+      [req.params.slug]
+    );
+    if (!rows.length || !rows[0].contenido_producto) {
+      return res.status(404).send('Producto no encontrado.');
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(rows[0].contenido_producto);
+  } catch (err) {
+    console.error('[Landings] Error sirviendo producto:', err.message);
     res.status(500).send('Error interno.');
   }
 });

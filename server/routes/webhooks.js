@@ -511,7 +511,7 @@ router.post('/webhook/stripe', async (req, res) => {
       }
 
       const dominio    = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
-      const productoUrl = exp.landing_slug ? `${dominio}/p/${exp.landing_slug}` : null;
+      const productoUrl = exp.landing_slug ? `${dominio}/acceso/${exp.landing_slug}` : null;
 
       await ResendConnector.entregarProducto({
         para:            emailCliente,
