@@ -17,7 +17,18 @@ export const ConversationDB = {
     const entrada = rows[0];
     const horas   = (Date.now() - new Date(entrada.ultima_actividad).getTime()) / 3_600_000;
     if (horas > TTL_HORAS) { await this.limpiar(chatId); return []; }
-    return entrada.messages || [];
+    let messages = entrada.messages || [];
+    // Sanear historial cargado — eliminar tool_results huérfanos al inicio
+    while (messages.length > 0) {
+      const first = messages[0];
+      const esUserLimpio = first.role === 'user' && (
+        typeof first.content === 'string' ||
+        (Array.isArray(first.content) && !first.content.some(b => b.type === 'tool_result'))
+      );
+      if (esUserLimpio) break;
+      messages = messages.slice(1);
+    }
+    return messages;
   },
 
   async guardar(chatId, messages) {
