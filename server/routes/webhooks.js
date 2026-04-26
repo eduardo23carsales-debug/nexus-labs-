@@ -20,6 +20,7 @@ import { manejarFuncionVoz }       from '../../jarvis/voice-function-handler.js'
 import { JARVIS_VOICE_CONFIG }     from '../../jarvis/jarvis-voice.config.js';
 import { VapiConnector }           from '../../connectors/vapi.connector.js';
 import { procesarVentaHotmart }    from '../../connectors/hotmart.connector.js';
+import { enviarReporte }           from '../../reporting/index.js';
 import { StripeConnector }         from '../../connectors/stripe.connector.js';
 import { ResendConnector }         from '../../connectors/resend.connector.js';
 import { SystemState }             from '../../config/system-state.js';
@@ -415,8 +416,18 @@ async function manejarCallback(cbq) {
       await TelegramConnector.notificar(`⚠️ Jarvis no pudo llamar: ${esc(err.message)}`);
     }
   }
-  if (data === 'analista')   { ejecutarAnalista().catch(console.error); }
-  if (data === 'supervisor') { ejecutarSupervisor().catch(console.error); }
+  if (data === 'reporte') {
+    await TelegramConnector.notificar('📊 Generando reporte...');
+    enviarReporte().catch(console.error);
+  }
+  if (data === 'analista') {
+    await TelegramConnector.notificar('🧠 Ejecutando analista...');
+    ejecutarAnalista().catch(console.error);
+  }
+  if (data === 'supervisor') {
+    await TelegramConnector.notificar('🔍 Ejecutando supervisor...');
+    ejecutarSupervisor().catch(console.error);
+  }
   if (data === 'ventas') {
     const conv = await LeadsDB.resumenConversiones();
     await TelegramConnector.notificar(`📈 Cierres: ${conv.cierres} / ${conv.total_leads} leads (${conv.tasa_cierre}%)`);
