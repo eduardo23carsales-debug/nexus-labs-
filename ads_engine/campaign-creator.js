@@ -14,13 +14,10 @@ import ENV from '../config/env.js';
 
 // Targeting base para productos digitales: EEUU hispanohablante
 const TARGETING_DIGITAL = {
-  age_min: 22,
-  age_max: 55,
-  geo_locations:      { countries: ['US'] },
-  locales:            [27],                      // Español
-  device_platforms:   ['mobile', 'desktop'],
-  facebook_positions: ['feed', 'story'],
-  instagram_positions: ['stream', 'story'],
+  age_min: 25,
+  age_max: 65,
+  geo_locations:          { countries: ['US'] },
+  targeting_automation:   { advantage_audience: 1 },
 };
 
 const ASSETS_DIR = path.resolve('assets');  // carpeta de fotos/videos locales
