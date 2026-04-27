@@ -629,15 +629,21 @@ export const TOOL_HANDLERS = {
   },
 
   async estado_sistema() {
-    const token    = await MetaConnector.validarToken();
-    const plan     = await PlansDB.hayPlanPendiente();
-    const conv     = await LeadsDB.resumenConversiones();
-    const rev      = await ConversionsDB.metricas();
-    const crmTotal = await ClientDB.total();
-    const seguim   = (await FollowUpDB.pendientes()).length;
+    const [token, pagina, pixel, plan, conv, rev, crmTotal, seguim] = await Promise.all([
+      MetaConnector.validarToken(),
+      MetaConnector.get(`/${ENV.META_PAGE_ID}`, { fields: 'id,name' }).then(d => ({ ok: true, nombre: d.name })).catch(e => ({ ok: false, error: e.message })),
+      MetaConnector.get(`/${ENV.META_PIXEL_ID}`, { fields: 'id,name' }).then(d => ({ ok: true, nombre: d.name })).catch(e => ({ ok: false, error: e.message })),
+      PlansDB.hayPlanPendiente(),
+      LeadsDB.resumenConversiones(),
+      ConversionsDB.metricas(),
+      ClientDB.total(),
+      FollowUpDB.pendientes().then(p => p.length),
+    ]);
 
     return [
-      `Token Meta: ${token.ok ? '✅ válido' : '❌ inválido'}`,
+      `Token Meta: ${token.ok ? '✅ válido' : `❌ inválido — ${token.error}`}`,
+      `Página Meta: ${pagina.ok ? `✅ ${pagina.nombre}` : `❌ ID incorrecto — ${pagina.error}`}`,
+      `Píxel Meta: ${pixel.ok ? `✅ ${pixel.nombre}` : `❌ ID incorrecto — ${pixel.error}`}`,
       `Plan pendiente: ${plan ? '⏳ sí' : '✅ ninguno'}`,
       `Leads totales: ${conv.total_leads} | Cierres: ${conv.cierres}`,
       `CRM: ${crmTotal} clientes | ${seguim} seguimientos vencidos`,
