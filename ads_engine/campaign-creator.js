@@ -108,7 +108,8 @@ async function crearFormulario(segmento) {
     thank_you_page: {
       title:       '¡Listo! Te contactamos en minutos',
       body:        'Eduardo te llamará personalmente para mostrarte cómo funciona el sistema.',
-      button_type: 'CLOSE',
+      button_type: 'VIEW_WEBSITE',
+      website_url: `https://${ENV.RAILWAY_DOMAIN || 'nexuslabs.com'}`,
     },
     locale:             'ES_LA',
     is_optimized_for_quality: true,
