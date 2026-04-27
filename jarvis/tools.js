@@ -1386,7 +1386,7 @@ export const TOOL_HANDLERS = {
 
     // Redactar email con Claude
     const prompt = [
-      `Redacta un email profesional y persuasivo en español para un negocio llamado "${FROM_NAME ? 'Ganancias con AI' : 'Nexus Labs'}".`,
+      `Redacta un email profesional y persuasivo en español para un negocio llamado "${ENV.EMAIL_FROM_NAME || 'Ganancias con AI'}".`,
       `Destinatario: ${nombre || 'cliente'}`,
       `Objetivo del email: ${objetivo}`,
       contexto ? `Contexto del cliente: ${contexto}` : '',
