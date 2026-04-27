@@ -260,6 +260,34 @@ const FUNCIONES_VAPI = [
     },
   },
 
+  // ── EMAIL MARKETING ──────────────────────────────────
+  {
+    name:        'ver_contactos',
+    description: 'Resumen de la lista de contactos por nicho: cuántos activos, bajas y rebotados.',
+    parameters:  { type: 'object', properties: {} },
+  },
+
+  {
+    name:        'lanzar_campana_email',
+    description: 'Lanza campaña de email masivo a los contactos de un nicho promocionando un producto.',
+    parameters: {
+      type: 'object',
+      properties: {
+        nicho:           { type: 'string', description: 'Nicho de la lista: automotriz, digital, general' },
+        nombre_producto: { type: 'string', description: 'Nombre del producto a promocionar' },
+        objetivo:        { type: 'string', description: 'Qué lograr: vender, generar interés, ofrecer descuento' },
+        limite:          { type: 'number', description: 'Máximo de emails. Útil para pruebas.' },
+      },
+      required: ['nicho', 'nombre_producto', 'objetivo'],
+    },
+  },
+
+  {
+    name:        'ver_campanas_email',
+    description: 'Métricas de campañas de email: enviados, aperturas, clicks.',
+    parameters:  { type: 'object', properties: {} },
+  },
+
   // ── EMAIL MANUAL ─────────────────────────────────────
   {
     name:        'enviar_email',
@@ -315,7 +343,8 @@ CAPACIDADES QUE TIENES:
 - Portafolio: crear proyectos, ver métricas, actualizar estado y revenue
 - Landings: crear páginas web para negocios
 - Productos: ver estado de experimentos digitales
-- Emails: redactar y enviar emails personalizados a clientes desde hola@gananciasconai.com
+- Emails individuales: redactar y enviar emails personalizados a clientes desde hola@gananciasconai.com
+- Email marketing masivo: lanzar campañas a listas de contactos por nicho, ver métricas de aperturas y clicks
 
 ESTILO DE VOZ:
 - Directo y ejecutivo — como un asistente de alto nivel

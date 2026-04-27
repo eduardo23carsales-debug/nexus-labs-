@@ -220,3 +220,49 @@ CREATE TABLE IF NOT EXISTS email_sequences (
   enviado_en    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   UNIQUE(email, fuente)
 );
+
+-- ── CONTACTOS — Lista de emails propios ─────────────
+CREATE TABLE IF NOT EXISTS contacts (
+  id          SERIAL        PRIMARY KEY,
+  email       VARCHAR(255)  NOT NULL UNIQUE,
+  nombre      VARCHAR(255),
+  telefono    VARCHAR(30),
+  nicho       VARCHAR(50)   NOT NULL DEFAULT 'automotriz',
+  datos       JSONB         NOT NULL DEFAULT '{}',  -- carro, año, modelo, etc.
+  fuente      VARCHAR(100)  NOT NULL DEFAULT 'csv', -- csv, manual, web
+  estado      VARCHAR(20)   NOT NULL DEFAULT 'activo', -- activo, baja, rebotado
+  creado_en   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contacts_nicho   ON contacts(nicho);
+CREATE INDEX IF NOT EXISTS idx_contacts_estado  ON contacts(estado);
+CREATE INDEX IF NOT EXISTS idx_contacts_email   ON contacts(email);
+
+-- ── CAMPAÑAS DE EMAIL ────────────────────────────────
+CREATE TABLE IF NOT EXISTS email_campaigns (
+  id              SERIAL        PRIMARY KEY,
+  nombre          VARCHAR(255)  NOT NULL,
+  nicho           VARCHAR(50),
+  experiment_id   INTEGER       REFERENCES experiments(id),
+  asunto          TEXT          NOT NULL,
+  cuerpo          TEXT          NOT NULL,
+  total_enviados  INTEGER       NOT NULL DEFAULT 0,
+  total_abiertos  INTEGER       NOT NULL DEFAULT 0,
+  total_clicks    INTEGER       NOT NULL DEFAULT 0,
+  total_bajas     INTEGER       NOT NULL DEFAULT 0,
+  estado          VARCHAR(20)   NOT NULL DEFAULT 'enviada',
+  creado_en       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+-- ── TRACKING DE EMAILS ───────────────────────────────
+CREATE TABLE IF NOT EXISTS email_tracking (
+  id           SERIAL        PRIMARY KEY,
+  campaign_id  INTEGER       REFERENCES email_campaigns(id),
+  email        VARCHAR(255)  NOT NULL,
+  evento       VARCHAR(20)   NOT NULL, -- abierto | click | baja
+  url          TEXT,
+  registrado_en TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_tracking_campaign ON email_tracking(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_email_tracking_email    ON email_tracking(email);

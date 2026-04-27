@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/dev/bot_opciones_V50/**)",
+      "Read(//c/dev//**)"
+    ],
+    "additionalDirectories": [
+      "C:\\dev\\agentes de hacer dinero\\Pagina para pagina y venta de autos"
+    ]
+  }
+}

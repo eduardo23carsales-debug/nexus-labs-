@@ -1,0 +1,377 @@
+{
+  "id": "e910317b-3cb4-47cc-9711-42aa00163f3d",
+  "name": "joyful-wonder",
+  "deletedAt": null,
+  "workspace": {
+    "name": "eduardo23carsales-debug's Projects"
+  },
+  "buckets": {
+    "edges": []
+  },
+  "environments": {
+    "edges": [
+      {
+        "node": {
+          "id": "eaa005b7-ffaa-4171-9da5-bdd79de0737f",
+          "name": "production",
+          "canAccess": true,
+          "deletedAt": null,
+          "unmergedChangesCount": null,
+          "serviceInstances": {
+            "edges": [
+              {
+                "node": {
+                  "id": "96190755-5038-48ec-929d-4c3943398179",
+                  "serviceId": "e0c122c9-2699-44a9-9a8c-300c719b2dca",
+                  "serviceName": "Postgres",
+                  "environmentId": "eaa005b7-ffaa-4171-9da5-bdd79de0737f",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "id": "ac0619e8-4846-47fc-ad25-7011ffe8e5f6",
+                    "meta": {
+                      "ignoreWatchPatterns": true,
+                      "image": "ghcr.io/railwayapp-templates/postgres-ssl:18",
+                      "imageDigest": "sha256:fefbf3919d09efa31e003699ae2d753a74efc73e29508e5f4dbcc0301ab20c31",
+                      "logsV2": true,
+                      "patchId": "f68630ba-a5f4-4da3-9d9a-20a59c4f38a0",
+                      "reason": "redeploy",
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": null,
+                          "buildEnvironment": null,
+                          "builder": "RAILPACK",
+                          "dockerfilePath": null,
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": null,
+                          "healthcheckTimeout": null,
+                          "ipv6EgressEnabled": false,
+                          "limitOverride": null,
+                          "multiRegionConfig": {
+                            "us-east4-eqdc4a": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": null,
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": "/var/lib/postgresql/data",
+                          "restartPolicyMaxRetries": 10,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": null,
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "skipBuildCache": true,
+                      "volumeMounts": [
+                        "/var/lib/postgresql/data"
+                      ]
+                    },
+                    "status": "SUCCESS",
+                    "createdAt": "2026-04-24T02:46:27.227Z",
+                    "deploymentStopped": false
+                  },
+                  "activeDeployments": [
+                    {
+                      "id": "ac0619e8-4846-47fc-ad25-7011ffe8e5f6",
+                      "status": "SUCCESS",
+                      "createdAt": "2026-04-24T02:46:27.227Z",
+                      "meta": {
+                        "ignoreWatchPatterns": true,
+                        "image": "ghcr.io/railwayapp-templates/postgres-ssl:18",
+                        "imageDigest": "sha256:fefbf3919d09efa31e003699ae2d753a74efc73e29508e5f4dbcc0301ab20c31",
+                        "logsV2": true,
+                        "patchId": "f68630ba-a5f4-4da3-9d9a-20a59c4f38a0",
+                        "reason": "redeploy",
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": null,
+                            "buildEnvironment": null,
+                            "builder": "RAILPACK",
+                            "dockerfilePath": null,
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": null,
+                            "healthcheckTimeout": null,
+                            "ipv6EgressEnabled": false,
+                            "limitOverride": null,
+                            "multiRegionConfig": {
+                              "us-east4-eqdc4a": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": null,
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": "/var/lib/postgresql/data",
+                            "restartPolicyMaxRetries": 10,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": null,
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "skipBuildCache": true,
+                        "volumeMounts": [
+                          "/var/lib/postgresql/data"
+                        ]
+                      }
+                    }
+                  ],
+                  "source": {
+                    "repo": null,
+                    "image": "ghcr.io/railwayapp-templates/postgres-ssl:18"
+                  },
+                  "domains": {
+                    "serviceDomains": [],
+                    "customDomains": []
+                  },
+                  "cronSchedule": null,
+                  "nextCronRunAt": null,
+                  "startCommand": null
+                }
+              },
+              {
+                "node": {
+                  "id": "e700098a-a7a8-4e2e-a328-b302fc50b2c0",
+                  "serviceId": "7a23fd9e-4522-4776-a12f-f811fe171cae",
+                  "serviceName": "nexus-agent",
+                  "environmentId": "eaa005b7-ffaa-4171-9da5-bdd79de0737f",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "id": "a1032297-8679-451d-a9e9-4e480dd31b0f",
+                    "meta": {
+                      "branch": "master",
+                      "buildOnly": false,
+                      "commitAuthor": "eduardo23carsales-debug",
+                      "commitHash": "fa102ad115124b237241ffe9f7ecd5eb29a60bb8",
+                      "commitMessage": "feat: mejorar calidad de voz de Sofía\n\n- Modelo ElevenLabs: eleven_turbo_v2_5 → eleven_multilingual_v2 (más natural)\n- firstMessageMode: waits-for-user → speaks-first (elimina silencio inicial)\n- style: 0.10 → 0.30 (más expresiva en momentos clave de la llamada)\n- stability: 0.55 → 0.45 (variación tonal más humana)\n- LLM: openai/gpt-4o → anthropic/claude-sonnet-4-6 (mejor seguimiento del prompt)\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+                      "configFile": "/railway.json",
+                      "fileServiceManifest": {
+                        "build": {
+                          "builder": "NIXPACKS"
+                        },
+                        "deploy": {
+                          "healthcheckPath": "/api/ping",
+                          "healthcheckTimeout": 100,
+                          "restartPolicyMaxRetries": 3,
+                          "restartPolicyType": "ON_FAILURE",
+                          "startCommand": "node index.js"
+                        }
+                      },
+                      "imageDigest": "sha256:a756b3570c98d8c83c57a06d0730a152b8f3fa510c56af7e0f64c53a3b794d7a",
+                      "logsV2": true,
+                      "nixpacksProviders": [],
+                      "plan": "hobby",
+                      "propertyFileMapping": {
+                        "build.builder": "$.build.builder",
+                        "deploy.healthcheckPath": "$.deploy.healthcheckPath",
+                        "deploy.healthcheckTimeout": "$.deploy.healthcheckTimeout",
+                        "deploy.restartPolicyMaxRetries": "$.deploy.restartPolicyMaxRetries",
+                        "deploy.restartPolicyType": "$.deploy.restartPolicyType",
+                        "deploy.startCommand": "$.deploy.startCommand"
+                      },
+                      "reason": "deploy",
+                      "repo": "eduardo23carsales-debug/nexus-labs-",
+                      "rootDirectory": "",
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": null,
+                          "buildEnvironment": "V3",
+                          "builder": "NIXPACKS",
+                          "dockerfilePath": null,
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": "/api/ping",
+                          "healthcheckTimeout": 100,
+                          "ipv6EgressEnabled": false,
+                          "limitOverride": null,
+                          "multiRegionConfig": {
+                            "us-east4-eqdc4a": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": null,
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": null,
+                          "restartPolicyMaxRetries": 3,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": "node index.js",
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "volumeMounts": []
+                    },
+                    "status": "SUCCESS",
+                    "createdAt": "2026-04-27T00:16:56.898Z",
+                    "deploymentStopped": false
+                  },
+                  "activeDeployments": [
+                    {
+                      "id": "a1032297-8679-451d-a9e9-4e480dd31b0f",
+                      "status": "SUCCESS",
+                      "createdAt": "2026-04-27T00:16:56.898Z",
+                      "meta": {
+                        "branch": "master",
+                        "buildOnly": false,
+                        "commitAuthor": "eduardo23carsales-debug",
+                        "commitHash": "fa102ad115124b237241ffe9f7ecd5eb29a60bb8",
+                        "commitMessage": "feat: mejorar calidad de voz de Sofía\n\n- Modelo ElevenLabs: eleven_turbo_v2_5 → eleven_multilingual_v2 (más natural)\n- firstMessageMode: waits-for-user → speaks-first (elimina silencio inicial)\n- style: 0.10 → 0.30 (más expresiva en momentos clave de la llamada)\n- stability: 0.55 → 0.45 (variación tonal más humana)\n- LLM: openai/gpt-4o → anthropic/claude-sonnet-4-6 (mejor seguimiento del prompt)\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+                        "configFile": "/railway.json",
+                        "fileServiceManifest": {
+                          "build": {
+                            "builder": "NIXPACKS"
+                          },
+                          "deploy": {
+                            "healthcheckPath": "/api/ping",
+                            "healthcheckTimeout": 100,
+                            "restartPolicyMaxRetries": 3,
+                            "restartPolicyType": "ON_FAILURE",
+                            "startCommand": "node index.js"
+                          }
+                        },
+                        "imageDigest": "sha256:a756b3570c98d8c83c57a06d0730a152b8f3fa510c56af7e0f64c53a3b794d7a",
+                        "logsV2": true,
+                        "nixpacksProviders": [],
+                        "plan": "hobby",
+                        "propertyFileMapping": {
+                          "build.builder": "$.build.builder",
+                          "deploy.healthcheckPath": "$.deploy.healthcheckPath",
+                          "deploy.healthcheckTimeout": "$.deploy.healthcheckTimeout",
+                          "deploy.restartPolicyMaxRetries": "$.deploy.restartPolicyMaxRetries",
+                          "deploy.restartPolicyType": "$.deploy.restartPolicyType",
+                          "deploy.startCommand": "$.deploy.startCommand"
+                        },
+                        "reason": "deploy",
+                        "repo": "eduardo23carsales-debug/nexus-labs-",
+                        "rootDirectory": "",
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": null,
+                            "buildEnvironment": "V3",
+                            "builder": "NIXPACKS",
+                            "dockerfilePath": null,
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": "/api/ping",
+                            "healthcheckTimeout": 100,
+                            "ipv6EgressEnabled": false,
+                            "limitOverride": null,
+                            "multiRegionConfig": {
+                              "us-east4-eqdc4a": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": null,
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": null,
+                            "restartPolicyMaxRetries": 3,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": "node index.js",
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "volumeMounts": []
+                      }
+                    }
+                  ],
+                  "source": {
+                    "repo": "eduardo23carsales-debug/nexus-labs-",
+                    "image": null
+                  },
+                  "domains": {
+                    "serviceDomains": [
+                      {
+                        "id": "dd00a6c7-3e63-4062-8da0-b4257b8a76e7",
+                        "domain": "nexus-agent-production-387a.up.railway.app",
+                        "targetPort": 8080
+                      }
+                    ],
+                    "customDomains": []
+                  },
+                  "cronSchedule": null,
+                  "nextCronRunAt": null,
+                  "startCommand": null
+                }
+              }
+            ]
+          },
+          "volumeInstances": {
+            "edges": [
+              {
+                "node": {
+                  "serviceId": "e0c122c9-2699-44a9-9a8c-300c719b2dca",
+                  "mountPath": "/var/lib/postgresql/data",
+                  "environmentId": "eaa005b7-ffaa-4171-9da5-bdd79de0737f",
+                  "currentSizeMB": 218.19392,
+                  "sizeMB": 5000,
+                  "volume": {
+                    "name": "postgres-volume",
+                    "id": "2964223d-dfe2-4d3f-99a3-2393c90e54e6"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "services": {
+    "edges": [
+      {
+        "node": {
+          "id": "7a23fd9e-4522-4776-a12f-f811fe171cae",
+          "name": "nexus-agent"
+        }
+      },
+      {
+        "node": {
+          "id": "e0c122c9-2699-44a9-9a8c-300c719b2dca",
+          "name": "Postgres"
+        }
+      }
+    ]
+  }
+}

@@ -24,6 +24,7 @@ import { generarProducto }                      from '../product_engine/index.js
 import { publicarConStripe }                    from '../product_engine/publisher.js';
 import { ResendConnector }                       from '../connectors/resend.connector.js';
 import { AnthropicConnector }                    from '../connectors/anthropic.connector.js';
+import { ContactsDB, EmailCampaignsDB }          from '../memory/contacts.db.js';
 import { HotmartConnector }                     from '../connectors/hotmart.connector.js';
 import { StripeConnector }                      from '../connectors/stripe.connector.js';
 import { ExperimentsDB, ProductsMemoryDB }      from '../memory/products.db.js';
@@ -415,6 +416,39 @@ Si Eduardo menciona una idea o tema específico (ej: "ganar $1000 con IA", "fitn
         enfoque:     { type: 'string', description: 'Producto o idea EXACTA de Eduardo. Si menciona un producto específico (ej: "ganar $1000 con IA en 30 días"), pásalo aquí y el sistema lo construye SIN investigar alternativas.' },
       },
     },
+  },
+
+  // ── EMAIL MARKETING MASIVO ────────────────────────
+  {
+    name: 'ver_contactos',
+    description: `Muestra el resumen de la lista de contactos por nicho: cuántos hay, cuántos activos, bajas y rebotados.
+Úsalo cuando Eduardo pregunte "cuántos contactos tenemos", "cómo está la lista", "cuántos emails del nicho automotriz".`,
+    input_schema: { type: 'object', properties: {} },
+  },
+
+  {
+    name: 'lanzar_campana_email',
+    description: `Lanza una campaña de email marketing masivo a los contactos de un nicho.
+Genera el email automáticamente con IA: asunto, cuerpo, oferta del producto, beneficios y link de la landing page.
+Incluye pixel de tracking para medir aperturas y clicks.
+Úsalo cuando Eduardo diga "manda campaña de email a los contactos automotriz sobre el curso X", "lanza email marketing a la lista", etc.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nicho:          { type: 'string', description: 'Nicho de la lista: automotriz, digital, general, etc.' },
+        nombre_producto: { type: 'string', description: 'Nombre del producto o experimento a promocionar' },
+        objetivo:       { type: 'string', description: 'Qué lograr: vender, generar interés, ofrecer descuento, informar' },
+        limite:         { type: 'number', description: 'Máximo de emails a enviar. Default: todos. Útil para pruebas.' },
+      },
+      required: ['nicho', 'nombre_producto', 'objetivo'],
+    },
+  },
+
+  {
+    name: 'ver_campanas_email',
+    description: `Muestra las campañas de email enviadas con métricas: enviados, abiertos, clicks, tasa de apertura.
+Úsalo cuando Eduardo pregunte "cómo van los emails", "qué tasa de apertura tuvo la campaña X".`,
+    input_schema: { type: 'object', properties: {} },
   },
 
   // ── EMAIL MANUAL ──────────────────────────────────
@@ -1193,6 +1227,145 @@ export const TOOL_HANDLERS = {
       }
       return `Pipeline abortado: ${err.message}`;
     }
+  },
+
+  async ver_contactos() {
+    const resumen = await ContactsDB.resumen();
+    if (!resumen.length) return 'No hay contactos importados aún. Cuando tengas el CSV dile a Jarvis "importa contactos".';
+    const total = resumen.reduce((s, r) => s + parseInt(r.total), 0);
+    const lineas = resumen.map(r =>
+      `• ${r.nicho}: ${r.activos} activos | ${r.bajas} bajas | ${r.rebotados} rebotados`
+    );
+    return `📋 Total contactos: ${total}\n${lineas.join('\n')}`;
+  },
+
+  async lanzar_campana_email({ nicho, nombre_producto, objetivo, limite }) {
+    if (!ResendConnector.disponible()) return '⚠️ RESEND_API_KEY no configurado.';
+
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    // Buscar el producto en experimentos
+    const experimentos = await ExperimentsDB.listar('activo');
+    const exp = experimentos.find(e =>
+      e.nombre.toLowerCase().includes(nombre_producto.toLowerCase())
+    );
+
+    const dominio   = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+    const landingUrl = exp?.landing_slug ? `${dominio}/p/${exp.landing_slug}` : null;
+    const precio    = exp?.precio || null;
+
+    // Cargar contactos del nicho
+    const contactos = await ContactsDB.listarPorNicho(nicho, limite || 9999);
+    if (!contactos.length) return `No hay contactos activos en el nicho "${nicho}". Importa la lista primero.`;
+
+    await notif(
+      `📧 <b>Campaña de email iniciada</b>\n` +
+      `📂 Nicho: ${nicho} | ${contactos.length} contactos\n` +
+      `📦 Producto: ${nombre_producto}\n` +
+      `⏳ Generando contenido con IA...`
+    );
+
+    // Generar asunto y cuerpo con Claude
+    const promptAsunto = `Genera SOLO el asunto de un email de marketing (máximo 9 palabras, en español, llamativo) para: ${objetivo} — producto: ${nombre_producto}. Solo el asunto.`;
+    const asunto = await AnthropicConnector.completar({
+      system: 'Eres un experto en email marketing para el mercado hispano en USA.',
+      prompt: promptAsunto,
+      maxTokens: 60,
+    });
+
+    const promptCuerpo = [
+      `Redacta el cuerpo de un email de marketing en español para hispanos en USA.`,
+      `Producto: ${nombre_producto}`,
+      `Objetivo: ${objetivo}`,
+      precio ? `Precio: $${precio}` : '',
+      landingUrl ? `Link de compra: ${landingUrl}` : '',
+      `El nicho de estos contactos es: ${nicho}`,
+      `Instrucciones:`,
+      `- Tono cercano, motivador y directo`,
+      `- Entre 3 y 5 párrafos cortos`,
+      `- Incluye los beneficios principales del producto`,
+      `- Termina con un llamado a la acción claro${landingUrl ? ' con el link' : ''}`,
+      `- NO incluyas saludo ni firma (el sistema los agrega)`,
+      `- NO incluyas el asunto`,
+    ].filter(Boolean).join('\n');
+
+    const cuerpo = await AnthropicConnector.completar({
+      system: 'Eres un experto en email marketing para el mercado hispano en USA.',
+      prompt: promptCuerpo,
+      maxTokens: 800,
+    });
+
+    // Crear registro de campaña
+    const campaign = await EmailCampaignsDB.crear({
+      nombre:        `${nombre_producto} → ${nicho}`,
+      nicho,
+      experiment_id: exp?.id || null,
+      asunto,
+      cuerpo,
+      totalEnviados: contactos.length,
+    });
+
+    const dominioBase = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+
+    // Enviar emails en lotes de 10 para no sobrecargar
+    let enviados = 0;
+    let errores  = 0;
+    const LOTE   = 10;
+
+    for (let i = 0; i < contactos.length; i += LOTE) {
+      const lote = contactos.slice(i, i + LOTE);
+      await Promise.allSettled(lote.map(async (c) => {
+        try {
+          const emailEnc = encodeURIComponent(c.email);
+          const pixelUrl = `${dominioBase}/track/open/${campaign.id}/${emailEnc}`;
+
+          // Agregar pixel de tracking y link trackeado al cuerpo
+          const cuerpoTracking = landingUrl
+            ? cuerpo.replace(landingUrl, `${dominioBase}/track/click/${campaign.id}/${emailEnc}?url=${encodeURIComponent(landingUrl)}`)
+            : cuerpo;
+
+          const cuerpoConPixel = cuerpoTracking + `\n<img src="${pixelUrl}" width="1" height="1" style="display:none">`;
+
+          const bajaUrl = `${dominioBase}/baja/${emailEnc}`;
+          const cuerpoFinal = cuerpoConPixel + `\n\n_Si no deseas recibir más emails, [haz click aquí](${bajaUrl})_`;
+
+          await ResendConnector.enviarEmailManual({
+            para:   c.email,
+            nombre: c.nombre,
+            asunto,
+            cuerpo: cuerpoFinal,
+          });
+          enviados++;
+        } catch {
+          errores++;
+        }
+      }));
+      // Pausa entre lotes para respetar rate limits de Resend
+      if (i + LOTE < contactos.length) await new Promise(r => setTimeout(r, 200));
+    }
+
+    await notif(
+      `✅ <b>Campaña enviada</b>\n` +
+      `📧 Enviados: ${enviados} | Errores: ${errores}\n` +
+      `📊 Asunto: "${asunto}"\n` +
+      `🔍 ID campaña: #${campaign.id} — usa "ver campañas email" para ver métricas`
+    );
+
+    return `Campaña #${campaign.id} enviada: ${enviados} emails de ${contactos.length} contactos. Asunto: "${asunto}".`;
+  },
+
+  async ver_campanas_email() {
+    const campanas = await EmailCampaignsDB.listar();
+    if (!campanas.length) return 'No hay campañas de email enviadas aún.';
+    return campanas.map(c => {
+      const apertura = c.total_enviados > 0
+        ? ((c.total_abiertos / c.total_enviados) * 100).toFixed(1)
+        : 0;
+      const clicks = c.total_enviados > 0
+        ? ((c.total_clicks / c.total_enviados) * 100).toFixed(1)
+        : 0;
+      return `• #${c.id} ${c.nombre}\n  📧 ${c.total_enviados} enviados | 👁 ${apertura}% apertura | 🖱 ${clicks}% clicks`;
+    }).join('\n');
   },
 
   async enviar_email({ para, nombre, objetivo, contexto_crm, asunto }) {
