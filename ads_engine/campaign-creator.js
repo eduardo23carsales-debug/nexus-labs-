@@ -172,7 +172,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
       // Creativo
       const creative_spec = assetTipo === 'video'
         ? { video_data: { video_id: assetId, title: copy.titulo, message: copy.cuerpo, call_to_action: { type: 'LEARN_MORE', value: { lead_gen_form_id: formularioId } } } }
-        : { link_data:  { image_hash: assetId, message: copy.cuerpo, name: copy.titulo, link: `https://www.facebook.com/${ENV.META_PAGE_ID}`, call_to_action: { type: 'LEARN_MORE', value: { lead_gen_form_id: formularioId } } } };
+        : { link_data:  { image_hash: assetId, message: copy.cuerpo, name: copy.titulo, link: `https://${ENV.RAILWAY_DOMAIN || 'nexuslabs.com'}`, call_to_action: { type: 'LEARN_MORE', value: { lead_gen_form_id: formularioId } } } };
 
       const creative = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/adcreatives`, {
         name:        `Creative — ${adsetNombre}`,
