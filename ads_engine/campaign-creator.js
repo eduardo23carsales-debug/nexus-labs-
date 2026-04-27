@@ -88,7 +88,7 @@ async function crearFormulario(segmento) {
       { type: 'FULL_NAME' },
       { type: 'PHONE' },
       { type: 'EMAIL' },
-      { key: 'experiencia', label: '¿Cuál es tu nivel de experiencia en negocios digitales?', type: 'SELECT',
+      { key: 'experiencia', label: '¿Cuál es tu nivel de experiencia en negocios digitales?', type: 'CUSTOM',
         options: [
           { key: 'cero',        value: 'Estoy empezando desde cero' },
           { key: 'basico',      value: 'Tengo algo de experiencia' },
@@ -96,7 +96,7 @@ async function crearFormulario(segmento) {
           { key: 'avanzado',    value: 'Tengo un negocio digital activo' },
         ]
       },
-      { key: 'objetivo', label: '¿Cuál es tu principal objetivo?', type: 'SELECT',
+      { key: 'objetivo', label: '¿Cuál es tu principal objetivo?', type: 'CUSTOM',
         options: [
           { key: 'ingresos_extra', value: 'Generar ingresos extra además de mi trabajo' },
           { key: 'reemplazar',     value: 'Reemplazar mi empleo con un negocio propio' },
