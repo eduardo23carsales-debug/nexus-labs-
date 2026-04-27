@@ -524,12 +524,14 @@ NO uses pipeline_completo si Eduardo menciona un producto específico que ya exi
 export const TOOL_HANDLERS = {
 
   async llamar_con_contexto({ telefono, nombre = 'cliente', objetivo, nicho, datos_producto, contexto_extra }) {
-    await llamarConContexto({ telefono, nombre, objetivo, nicho, datos_producto, contextoExtra: contexto_extra });
+    const res = await llamarConContexto({ telefono, nombre, objetivo, nicho, datos_producto, contextoExtra: contexto_extra });
+    if (res?.ok === false) return `Llamada FALLIDA a ${nombre} (${telefono}). Error: ${res.error}`;
     return `Llamada iniciada a ${nombre} (${telefono}). Objetivo: ${objetivo}`;
   },
 
   async llamar_simple({ telefono, nombre, segmento = 'general' }) {
-    await llamarLead({ nombre, telefono, segmento });
+    const res = await llamarLead({ nombre, telefono, segmento });
+    if (res === undefined || res?.ok === false) return `Llamada FALLIDA a ${nombre} (${telefono}).`;
     return `Llamada iniciada a ${nombre} (${telefono}).`;
   },
 

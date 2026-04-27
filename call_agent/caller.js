@@ -40,7 +40,7 @@ export async function llamarLead({ nombre, telefono, segmento }) {
     );
 
     console.log(`[Caller] Llamada iniciada: ${call.id}`);
-    return call.id;
+    return { ok: true, callId: call.id };
 
   } catch (err) {
     const msg = err.response?.data?.message || err.message;
@@ -48,6 +48,7 @@ export async function llamarLead({ nombre, telefono, segmento }) {
     await TelegramConnector.notificar(
       `⚠️ <b>VAPI Error:</b> No se pudo llamar a ${esc(nombre)}\n<code>${esc(msg)}</code>`
     );
+    return { ok: false, error: msg };
   }
 }
 

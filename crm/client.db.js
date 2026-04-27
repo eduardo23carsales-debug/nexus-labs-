@@ -88,7 +88,7 @@ export const ClientDB = {
     const historial = [nueva, ...(rows[0].historial || [])];
 
     const updates = [`historial = $1`, `actualizado_en = NOW()`];
-    const vals    = [historial, tel];
+    const vals    = [JSON.stringify(historial), tel];
 
     if (interaccion.estado_nuevo) {
       updates.push(`estado = $3`);

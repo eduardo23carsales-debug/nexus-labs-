@@ -9,8 +9,8 @@ import { LeadsDB, ESTADOS }        from '../memory/leads.db.js';
 import { PlansDB }                 from '../memory/plans.db.js';
 import { ejecutarPlan }            from '../agents/ejecutor/index.js';
 import { ClientDB, ESTADOS_CRM }   from '../crm/client.db.js';
-import { procesarResultadoCRM }    from './context-caller.js';
 import { notificarCitaConfirmada } from '../jarvis/notificar-cita.js';
+import { ConversationDB }          from '../memory/conversation.db.js';
 import ENV                         from '../config/env.js';
 
 const ICONOS = {
@@ -62,21 +62,30 @@ export async function procesarResultadoSofia(callData) {
 
     if (citaAgendada) {
       await LeadsDB.marcarCitaAgendada(telefono, { dia: diaCita, hora: horaCita });
-
-      const cliente = await ClientDB.obtener(telefono);
+      const clienteCita = await ClientDB.obtener(telefono);
       await notificarCitaConfirmada({
         nombre, telefono, diaCita, horaCita,
-        nicho:  cliente?.nicho || null,
+        nicho:  clienteCita?.nicho || null,
         notas:  callData.summary || null,
       });
+    }
 
-      if (cliente) {
-        await ClientDB.registrarInteraccion(telefono, {
-          tipo:        'cita',
-          resultado:   `Cita agendada: ${diaCita} a las ${horaCita}`,
-          estado_nuevo: ESTADOS_CRM.CITA_AGENDADA,
-        });
-      }
+    // Siempre actualizar CRM con el resultado completo de la llamada
+    const estadoCRM = citaAgendada
+      ? ESTADOS_CRM.CITA_AGENDADA
+      : (endedReason === 'no-answer' || endedReason === 'busy')
+        ? ESTADOS_CRM.NO_CONTESTO
+        : ESTADOS_CRM.CONTACTADO;
+
+    const clienteExiste = await ClientDB.obtener(telefono);
+    if (clienteExiste) {
+      await ClientDB.registrarInteraccion(telefono, {
+        tipo:        'llamada',
+        resultado:   citaAgendada ? `Cita agendada: ${detalleCita}` : (ESTADOS_ES[endedReason] || endedReason || 'Completada'),
+        notas:       summary || '',
+        duracion:    duration,
+        estado_nuevo: estadoCRM,
+      });
     }
 
     // Mensaje Telegram (resultado general de la llamada)
@@ -112,6 +121,29 @@ export async function procesarResultadoSofia(callData) {
 
     await TelegramConnector.notificar(msg, { reply_markup: { inline_keyboard: [botones] } });
     console.log(`[Webhook] Resultado: ${nombre} — ${endedReason || status}${citaAgendada ? ' — CITA ✅' : ''}`);
+
+    // Inyectar el resultado en el historial de Jarvis para que sepa sin que Eduardo tenga que preguntar
+    const chatId = ENV.TELEGRAM_CHAT_ID;
+    if (chatId) {
+      try {
+        const historial = await ConversationDB.cargar(chatId);
+        if (historial.length > 0) {
+          const infoLlamada = [
+            `[Resultado de llamada automática]`,
+            `Sofía llamó a ${nombre} (${telefono}).`,
+            `Estado: ${estadoTxt}.`,
+            citaAgendada ? `CITA AGENDADA: ${detalleCita}.` : null,
+            summary      ? `Resumen: ${summary}`            : null,
+          ].filter(Boolean).join(' ');
+
+          historial.push({ role: 'user',      content: infoLlamada });
+          historial.push({ role: 'assistant', content: `Entendido. Resultado de la llamada a ${nombre} guardado en CRM. ${citaAgendada ? `Cita confirmada para ${detalleCita}.` : `Estado: ${estadoTxt}.`}` });
+          await ConversationDB.guardar(chatId, historial);
+        }
+      } catch (e) {
+        console.warn('[Webhook] No se pudo inyectar resultado en conversación Jarvis:', e.message);
+      }
+    }
 
   } catch (err) {
     console.error('[Webhook] Error procesando resultado Sofía:', err.message);
