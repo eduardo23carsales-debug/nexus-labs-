@@ -165,6 +165,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
         targeting:         TARGETING_DIGITAL,
         optimization_goal: 'LEAD_GENERATION',
         bid_strategy:      'LOWEST_COST_WITHOUT_CAP',
+        destination_type:  'ON_AD',
         promoted_object:   { page_id: ENV.META_PAGE_ID },
       });
 
