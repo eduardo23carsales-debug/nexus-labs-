@@ -106,9 +106,9 @@ async function crearFormulario(segmento) {
       },
     ],
     thank_you_page: {
-      title:    '¡Listo! Te contactamos en minutos',
-      body:     'Eduardo te llamará personalmente para mostrarte cómo funciona el sistema.',
-      button_text: 'Volver a Facebook',
+      title:       '¡Listo! Te contactamos en minutos',
+      body:        'Eduardo te llamará personalmente para mostrarte cómo funciona el sistema.',
+      button_type: 'CLOSE',
     },
     locale:             'ES_LA',
     is_optimized_for_quality: true,
