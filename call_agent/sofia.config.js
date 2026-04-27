@@ -76,8 +76,8 @@ export const SOFIA_CONFIG = {
   name: 'Sofía — Nexus Labs',
   endCallFunctionEnabled: true,
   model: {
-    provider:    'openai',
-    model:       'gpt-4o',
+    provider:    'anthropic',
+    model:       'claude-sonnet-4-6',
     temperature: 0.65,
     messages: [{
       role: 'system',
@@ -155,14 +155,14 @@ REGLAS DE ORO:
   voice: {
     provider:                 '11labs',
     voiceId:                  'KDG2CWzkFgcZz4Vqbu8m',
-    model:                    'eleven_turbo_v2_5',
-    stability:                0.55,
+    model:                    'eleven_multilingual_v2',
+    stability:                0.45,
     similarityBoost:          0.80,
-    style:                    0.10,
+    style:                    0.30,
     useSpeakerBoost:          true,
     optimizeStreamingLatency: 2,
   },
-  firstMessageMode: 'assistant-waits-for-user',
+  firstMessageMode: 'assistant-speaks-first',
   transcriber: {
     provider:    'deepgram',
     model:       'nova-2',
