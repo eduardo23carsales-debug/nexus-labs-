@@ -165,7 +165,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
     assetId   = await subirFotoLocal(fotoPath);
   } else {
     assetTipo = 'dalle';
-    assetId   = await generarYSubirImagen(seg.imagenPrompt);
+    assetId   = (await generarYSubirImagen(seg.imagenPrompt)).hash;
   }
 
   // 3. Formulario nativo
@@ -177,16 +177,16 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
     try {
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
 
-      // AdSet
+      // AdSet — promoted_object requerido para Lead Ads en API v25
       const adset = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/adsets`, {
-        name:            adsetNombre,
-        campaign_id:     campana.id,
-        status:          'ACTIVE',
-        daily_budget:    Math.round(presupuestoDia / seg.copies.length * 100),
-        billing_event:   'IMPRESSIONS',
-        targeting:       TARGETING_DIGITAL,
-        optimization_goal:   'LEAD_GENERATION',
-        lead_gen_form_id:    formularioId,
+        name:              adsetNombre,
+        campaign_id:       campana.id,
+        status:            'ACTIVE',
+        daily_budget:      Math.round(presupuestoDia / seg.copies.length * 100),
+        billing_event:     'IMPRESSIONS',
+        targeting:         TARGETING_DIGITAL,
+        optimization_goal: 'LEAD_GENERATION',
+        promoted_object:   { page_id: ENV.META_PAGE_ID },
       });
 
       // Creativo
