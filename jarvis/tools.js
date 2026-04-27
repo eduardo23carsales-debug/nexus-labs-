@@ -1371,8 +1371,11 @@ export const TOOL_HANDLERS = {
   async enviar_email({ para, nombre, objetivo, contexto_crm, asunto }) {
     if (!ResendConnector.disponible()) return '⚠️ RESEND_API_KEY no configurado en Railway.';
 
-    // Buscar cliente en CRM si no hay contexto
+    // Buscar cliente en CRM + detectar producto mencionado para el botón
     let contexto = contexto_crm || '';
+    let urlBoton = null;
+    let textoBoton = '🛒 Quiero acceso ahora';
+
     if (!contexto && nombre) {
       try {
         const resultados = await ClientDB.buscar(nombre);
@@ -1384,6 +1387,22 @@ export const TOOL_HANDLERS = {
       } catch {}
     }
 
+    // Detectar si el objetivo menciona un producto y extraer su landing URL
+    try {
+      const experimentos = await ExperimentsDB.listar('activo');
+      const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+      const exp = experimentos.find(e =>
+        objetivo.toLowerCase().includes(e.nombre.toLowerCase().substring(0, 15))
+      );
+      if (exp?.landing_slug) {
+        urlBoton   = `${dominio}/p/${exp.landing_slug}`;
+        textoBoton = `🛒 Quiero acceder por $${exp.precio}`;
+      } else if (exp?.stripe_payment_link) {
+        urlBoton   = exp.stripe_payment_link;
+        textoBoton = `🛒 Quiero acceder por $${exp.precio}`;
+      }
+    } catch {}
+
     // Redactar email con Claude
     const prompt = [
       `Redacta un email profesional y persuasivo en español para un negocio llamado "${ENV.EMAIL_FROM_NAME || 'Ganancias con AI'}".`,
@@ -1394,9 +1413,9 @@ export const TOOL_HANDLERS = {
       `- Tono cálido, directo y motivador`,
       `- Sin emojis excesivos — máximo 1-2`,
       `- Entre 3 y 6 párrafos cortos`,
-      `- Incluye un llamado a la acción claro al final`,
+      `- El botón de acción lo agrega el sistema automáticamente — NO incluyas URLs ni links en el texto`,
       `- NO incluyas saludo inicial (lo agrega el sistema) ni firma (la agrega el sistema)`,
-      `- Devuelve SOLO el cuerpo del email, nada más`,
+      `- Devuelve SOLO el cuerpo del email en texto plano, nada más`,
     ].filter(Boolean).join('\n');
 
     const asuntoFinal = asunto || await AnthropicConnector.completar({
@@ -1411,7 +1430,7 @@ export const TOOL_HANDLERS = {
       maxTokens: 800,
     });
 
-    await ResendConnector.enviarEmailManual({ para, nombre, asunto: asuntoFinal, cuerpo });
+    await ResendConnector.enviarEmailManual({ para, nombre, asunto: asuntoFinal, cuerpo, urlBoton, textoBoton });
 
     await TelegramConnector.notificar(
       `📧 <b>Email enviado</b>\n` +

@@ -319,18 +319,44 @@ export const ResendConnector = {
   },
 
   // ── Email manual redactado por Jarvis ───────────────
-  async enviarEmailManual({ para, nombre, asunto, cuerpo }) {
+  async enviarEmailManual({ para, nombre, asunto, cuerpo, urlBoton = null, textoBoton = '🛒 Quiero acceso ahora' }) {
     if (!this.disponible()) throw new Error('RESEND_API_KEY no configurado');
     const resend      = await getResend();
     const saludo      = nombre ? `Hola <strong style="color:#00ff88;">${nombre}</strong>` : 'Hola';
     const firmaNombre = FROM_NAME();
     const firmaEmail  = FROM();
 
-    const parrafos = cuerpo
+    // Extraer URLs del cuerpo y convertirlas en botón si no hay urlBoton explícita
+    let urlDetectada = urlBoton;
+    let cuerpoLimpio = cuerpo;
+    if (!urlDetectada) {
+      // Detectar markdown [texto](url) y extraer la URL
+      const mdMatch = cuerpo.match(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/);
+      if (mdMatch) {
+        urlDetectada = mdMatch[2];
+        textoBoton   = `🛒 ${mdMatch[1]}`;
+        cuerpoLimpio = cuerpo.replace(mdMatch[0], '');
+      } else {
+        // Detectar URL suelta
+        const urlMatch = cuerpo.match(/https?:\/\/[^\s<>"]+/);
+        if (urlMatch) {
+          urlDetectada = urlMatch[0];
+          cuerpoLimpio = cuerpo.replace(urlMatch[0], '').trim();
+        }
+      }
+    }
+
+    const parrafos = cuerpoLimpio
       .split('\n')
       .filter(l => l.trim())
       .map(l => `<p style="color:#ccc;line-height:1.8;margin:0 0 16px;">${l}</p>`)
       .join('');
+
+    const botonHtml = urlDetectada
+      ? `<div style="text-align:center;margin:32px 0;">
+          <a href="${urlDetectada}" style="background:#00ff88;color:#000;padding:16px 36px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;">${textoBoton}</a>
+        </div>`
+      : '';
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#0f0f0f;">
@@ -341,6 +367,7 @@ export const ResendConnector = {
   <div style="padding:40px 32px;">
     <p style="font-size:1.05em;color:#e0e0e0;margin:0 0 24px;">${saludo},</p>
     ${parrafos}
+    ${botonHtml}
   </div>
   <div style="background:#111;padding:20px 32px;text-align:center;border-top:1px solid #222;">
     <p style="color:#444;font-size:0.8em;margin:0;">${firmaNombre} · <a href="mailto:${firmaEmail}" style="color:#555;">${firmaEmail}</a></p>
