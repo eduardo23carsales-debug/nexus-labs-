@@ -32,8 +32,8 @@ export const MetaConnector = {
     } catch (err) {
       const metaError = err.response?.data?.error;
       if (metaError) {
-        const detalle = `Meta API ${err.response.status} — ${metaError.message} (code: ${metaError.code}, subcode: ${metaError.error_subcode || 'n/a'})`;
-        console.error(`[Meta] Error en ${endpoint}:`, detalle);
+        console.error(`[Meta] Error completo en ${endpoint}:`, JSON.stringify(metaError));
+        const detalle = `Meta API ${err.response.status} — ${metaError.message} (code: ${metaError.code}, subcode: ${metaError.error_subcode || 'n/a'})${metaError.error_user_msg ? ` | ${metaError.error_user_msg}` : ''}`;
         throw new Error(detalle);
       }
       throw err;
