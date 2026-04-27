@@ -373,6 +373,19 @@ Lista qué productos se están vendiendo, cuántas ventas tienen, y cuánto reve
   },
 
   {
+    name: 'ver_producto',
+    description: `Muestra los links de un producto digital específico: landing de ventas, URL del producto (lo que recibe el comprador), y Stripe.
+Úsalo cuando Eduardo diga "muéstrame el producto", "ver qué recibe el cliente", "dame el link del curso", "revisa el producto X".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID numérico del experimento' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  {
     name: 'pipeline_completo',
     description: `Pipeline completo de producto digital: busca nicho → genera producto → crea imagen de portada → lanza campaña en Meta Ads.
 Todo en un solo comando. Tarda ~10 minutos porque genera el producto completo.
@@ -858,6 +871,37 @@ export const TOOL_HANDLERS = {
     return `Experimentos (${estado}):\n${lineas.join('\n')}`;
   },
 
+  async ver_producto({ nombre_o_id }) {
+    let exp = null;
+    const id = parseInt(nombre_o_id);
+    if (!isNaN(id)) {
+      exp = await ExperimentsDB.obtener(id);
+    }
+    if (!exp) {
+      const lista = await ExperimentsDB.listar('activo');
+      exp = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+    }
+    if (!exp) return `No encontré producto con "${nombre_o_id}". Usa ver_experimentos para ver los disponibles.`;
+
+    const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+    const accesoUrl  = exp.landing_slug ? `${dominio}/acceso/${exp.landing_slug}` : null;
+    const landingUrl = exp.landing_slug ? `${dominio}/p/${exp.landing_slug}` : exp.producto_url || null;
+    const tieneContenido = !!(exp.contenido_producto && exp.contenido_producto.length > 100);
+
+    let respuesta = `📦 <b>${exp.nombre}</b>\n`;
+    respuesta += `💵 Precio: $${exp.precio} | Tipo: ${exp.tipo}\n`;
+    respuesta += `📊 Estado: ${exp.estado}\n`;
+    respuesta += tieneContenido
+      ? `✅ Contenido generado (${Math.round((exp.contenido_producto?.length || 0) / 1024)} KB)\n`
+      : `⚠️ Sin contenido generado\n`;
+    if (landingUrl) respuesta += `🌐 Landing de ventas: ${landingUrl}\n`;
+    if (accesoUrl)  respuesta += `🎓 Producto (vista comprador): ${accesoUrl}\n`;
+    if (exp.stripe_payment_link) respuesta += `💳 Stripe: ${exp.stripe_payment_link}\n`;
+
+    await TelegramConnector.notificar(respuesta).catch(() => {});
+    return respuesta;
+  },
+
   async relanzar_producto({ nombre_o_id, presupuesto = 10, segmento = 'emprendedor-principiante' }) {
     const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
 
@@ -1033,6 +1077,9 @@ export const TOOL_HANDLERS = {
         }
       }
 
+      const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+      const accesoUrl = stripeInfo?.slug ? `${dominio}/acceso/${stripeInfo.slug}` : null;
+
       await notif(
         `🚀 <b>Pipeline completo</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -1041,8 +1088,12 @@ export const TOOL_HANDLERS = {
         `📊 Campaña Meta: ${campaña.nombre}\n` +
         `💰 Presupuesto: $${presupuesto}/día\n` +
         `🖼️ Imagen: ${imagenHash ? 'portada del producto ✅' : 'genérica del segmento'}\n` +
-        (stripeInfo ? `🌐 Landing: ${stripeInfo.landing_url}\n💳 Stripe: ${stripeInfo.stripe_payment_link}\n` : `⚠️ Stripe no configurado — agrega STRIPE_SECRET_KEY\n`) +
-        `\nCuando alguien llena el formulario → llegan al CRM.\nCuando alguien paga en la landing → reciben el producto por email.\nDecisión automática a las 72h.`
+        (stripeInfo
+          ? `🌐 Landing de ventas: ${stripeInfo.landing_url}\n` +
+            `💳 Stripe checkout: ${stripeInfo.stripe_payment_link}\n` +
+            (accesoUrl ? `🎓 <b>Producto (lo que recibe el comprador):</b> ${accesoUrl}\n` : '')
+          : `⚠️ Stripe no configurado — agrega STRIPE_SECRET_KEY\n`) +
+        `\nCuando alguien paga → recibe email con el link del producto automáticamente.`
       );
 
       return `Pipeline completo. Producto: "${nicho.nombre_producto}" | Campaña ID: ${campaña.campaign_id} | Landing: ${stripeInfo?.landing_url || 'sin Stripe'}`;
