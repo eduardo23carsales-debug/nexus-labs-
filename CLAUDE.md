@@ -112,11 +112,10 @@ sandbox/                     → Experimentos y pruebas (NO es código de produc
 - Configuración siempre desde `config/env.js`, nunca `process.env.X` directo
 - Números de teléfono → siempre normalizar a `+1XXXXXXXXXX`
 
-### Sobre la persistencia (CRÍTICO)
-- Toda la memoria está en JSON en `/tmp` — se **borra** cuando Railway hace redeploy
-- La migración a PostgreSQL es la deuda técnica #1
-- La API de cada DB está abstraída: cambiar a PG solo requiere reemplazar `fs.read/write` con queries, manteniendo los mismos métodos públicos
-- **Nunca guardar datos críticos de producción sin antes migrar a PG**
+### Sobre la persistencia
+- Toda la memoria está en **PostgreSQL en Railway** — persiste entre redeploys ✅
+- Schema en `database/schema.sql`, migración automática al arrancar via `database/migrate.js`
+- Tablas activas: `leads`, `calls`, `plans`, `campaigns`, `conversions`, `clients`, `follow_ups`, `experiments`, `customers`, `projects`, `email_sequences`, `product_memory`
 
 ---
 
@@ -124,7 +123,7 @@ sandbox/                     → Experimentos y pruebas (NO es código de produc
 
 | # | Problema | Impacto | Estado |
 |---|----------|---------|--------|
-| 1 | Persistencia en `/tmp` se borra en redeploy | CRÍTICO | Pendiente migración PG |
+| 1 | ~~Persistencia en `/tmp` se borra en redeploy~~ | ~~CRÍTICO~~ | ✅ Resuelto — todo en PostgreSQL |
 | 2 | `financial_control` no integrado en flujo | MEDIO | Existe pero no se llama |
 | 3 | Sin retry automático en Meta API y VAPI | MEDIO | No hay backoff |
 | 4 | ~~`AutoAprobado Miami` hardcodeado en configs~~ | ~~MEDIO~~ | ✅ Resuelto — nombre es Nexus Labs |

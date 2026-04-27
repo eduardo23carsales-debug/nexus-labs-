@@ -172,7 +172,7 @@ export const ResendConnector = {
   // ── Secuencia post-compra: días 1, 3, 7, 14 ────────
   async procesarSecuenciaPostCompra() {
     const { rows: customers } = await query(
-      `SELECT c.email, c.nombre, c.producto, c.experiment_id, c.created_en,
+      `SELECT c.email, c.nombre, c.producto, c.experiment_id, c.creado_en,
               e.landing_slug, e.precio, e.stripe_payment_link
        FROM customers c LEFT JOIN experiments e ON e.id = c.experiment_id
        ORDER BY c.creado_en DESC LIMIT 500`
