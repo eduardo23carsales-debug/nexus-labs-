@@ -989,10 +989,11 @@ export const TOOL_HANDLERS = {
       let imagenHash = null;
       try {
         const promptImagen = [
-          `Professional digital product cover for "${nicho.nombre_producto}",`,
-          `target audience: ${nicho.subgrupo_latino || 'Hispanic entrepreneurs'},`,
-          `dark premium background, bold white title text, modern design,`,
-          `ebook or course mockup style, high quality marketing image`,
+          `Modern digital marketing ad image for a course about earning money online with AI,`,
+          `Hispanic entrepreneur working on a sleek laptop, phone showing cash app notifications,`,
+          `clean minimal background with subtle blue light glow, professional photo style,`,
+          `NO TEXT, NO WORDS, NO LETTERS anywhere in the image,`,
+          `cinematic lighting, aspirational lifestyle, 4k quality`,
         ].join(' ');
         const imagen = await generarYSubirImagen(promptImagen);
         imagenHash = imagen.hash;
