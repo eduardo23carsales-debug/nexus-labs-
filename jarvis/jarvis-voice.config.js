@@ -260,6 +260,22 @@ const FUNCIONES_VAPI = [
     },
   },
 
+  // ── EMAIL MANUAL ─────────────────────────────────────
+  {
+    name:        'enviar_email',
+    description: 'Redacta y envía un email personalizado a un cliente. Jarvis genera el contenido con IA según el objetivo que le indiques.',
+    parameters: {
+      type: 'object',
+      properties: {
+        para:         { type: 'string', description: 'Email del destinatario' },
+        nombre:       { type: 'string', description: 'Nombre del destinatario' },
+        objetivo:     { type: 'string', description: 'Qué lograr: vender, informar, motivar, ofrecer descuento, dar acceso, etc.' },
+        asunto:       { type: 'string', description: 'Asunto del email. Si no se dice, Jarvis lo genera.' },
+      },
+      required: ['para', 'objetivo'],
+    },
+  },
+
   // ── PRODUCTOS DIGITALES ──────────────────────────────
   {
     name:        'ver_experimentos',
@@ -299,6 +315,7 @@ CAPACIDADES QUE TIENES:
 - Portafolio: crear proyectos, ver métricas, actualizar estado y revenue
 - Landings: crear páginas web para negocios
 - Productos: ver estado de experimentos digitales
+- Emails: redactar y enviar emails personalizados a clientes desde hola@gananciasconai.com
 
 ESTILO DE VOZ:
 - Directo y ejecutivo — como un asistente de alto nivel
@@ -328,7 +345,7 @@ REGLAS:
     keywords: [
       'Jarvis', 'Sofía', 'campaña', 'leads', 'landing', 'llamar', 'reporte',
       'pausa', 'escala', 'crea', 'analista', 'supervisor', 'proyecto', 'portafolio',
-      'revenue', 'cliente', 'seguimiento', 'venta', 'CRM', 'experimento',
+      'revenue', 'cliente', 'seguimiento', 'venta', 'CRM', 'experimento', 'email', 'enviar', 'correo',
     ],
     endpointing: 300,
   },

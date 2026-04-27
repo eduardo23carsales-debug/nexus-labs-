@@ -22,6 +22,8 @@ import { construirLanding }                     from './landing-builder.js';
 import { investigarNicho, construirNichoDesdeIdea } from '../market_research_agent/index.js';
 import { generarProducto }                      from '../product_engine/index.js';
 import { publicarConStripe }                    from '../product_engine/publisher.js';
+import { ResendConnector }                       from '../connectors/resend.connector.js';
+import { AnthropicConnector }                    from '../connectors/anthropic.connector.js';
 import { HotmartConnector }                     from '../connectors/hotmart.connector.js';
 import { StripeConnector }                      from '../connectors/stripe.connector.js';
 import { ExperimentsDB, ProductsMemoryDB }      from '../memory/products.db.js';
@@ -412,6 +414,31 @@ Si Eduardo menciona una idea o tema específico (ej: "ganar $1000 con IA", "fitn
         segmento:    { type: 'string', description: 'Segmento de Meta Ads. Default: emprendedor-principiante' },
         enfoque:     { type: 'string', description: 'Producto o idea EXACTA de Eduardo. Si menciona un producto específico (ej: "ganar $1000 con IA en 30 días"), pásalo aquí y el sistema lo construye SIN investigar alternativas.' },
       },
+    },
+  },
+
+  // ── EMAIL MANUAL ──────────────────────────────────
+  {
+    name: 'enviar_email',
+    description: `Redacta y envía un email personalizado a un cliente o cualquier dirección de correo.
+Jarvis busca al cliente en el CRM si das nombre o teléfono, usa su historial para personalizar el mensaje, y lo envía desde hola@gananciasconai.com.
+Si el cliente no está en el CRM, redacta según el objetivo que le indiques.
+Úsalo cuando Eduardo diga:
+- "manda un email a juan@gmail.com diciéndole X"
+- "escríbele a María que su acceso está listo"
+- "manda un email a todos los que compraron el curso"
+- "envíale un email a Pedro ofreciéndole el descuento"
+- "escríbele a [nombre] algo motivacional para que compre"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        para:          { type: 'string', description: 'Email del destinatario. Si no lo sabes, busca al cliente por nombre en el CRM primero.' },
+        nombre:        { type: 'string', description: 'Nombre del destinatario para personalizar el saludo' },
+        objetivo:      { type: 'string', description: 'Qué quieres lograr con el email: vender, informar, motivar, dar acceso, ofrecer descuento, etc.' },
+        contexto_crm:  { type: 'string', description: 'Información del cliente del CRM: qué compró, estado, historial — para personalizar el mensaje' },
+        asunto:        { type: 'string', description: 'Asunto del email. Si no se indica, Jarvis lo genera según el objetivo.' },
+      },
+      required: ['para', 'objetivo'],
     },
   },
 
@@ -1166,6 +1193,61 @@ export const TOOL_HANDLERS = {
       }
       return `Pipeline abortado: ${err.message}`;
     }
+  },
+
+  async enviar_email({ para, nombre, objetivo, contexto_crm, asunto }) {
+    if (!ResendConnector.disponible()) return '⚠️ RESEND_API_KEY no configurado en Railway.';
+
+    // Buscar cliente en CRM si no hay contexto
+    let contexto = contexto_crm || '';
+    if (!contexto && nombre) {
+      try {
+        const resultados = await ClientDB.buscar(nombre);
+        if (resultados.length) {
+          const c = resultados[0];
+          contexto = `Cliente: ${c.nombre} | Estado CRM: ${c.estado} | Nicho: ${c.nicho}${c.notas ? ` | Notas: ${c.notas}` : ''}`;
+          if (!nombre) nombre = c.nombre;
+        }
+      } catch {}
+    }
+
+    // Redactar email con Claude
+    const prompt = [
+      `Redacta un email profesional y persuasivo en español para un negocio llamado "${FROM_NAME ? 'Ganancias con AI' : 'Nexus Labs'}".`,
+      `Destinatario: ${nombre || 'cliente'}`,
+      `Objetivo del email: ${objetivo}`,
+      contexto ? `Contexto del cliente: ${contexto}` : '',
+      `Instrucciones:`,
+      `- Tono cálido, directo y motivador`,
+      `- Sin emojis excesivos — máximo 1-2`,
+      `- Entre 3 y 6 párrafos cortos`,
+      `- Incluye un llamado a la acción claro al final`,
+      `- NO incluyas saludo inicial (lo agrega el sistema) ni firma (la agrega el sistema)`,
+      `- Devuelve SOLO el cuerpo del email, nada más`,
+    ].filter(Boolean).join('\n');
+
+    const asuntoFinal = asunto || await AnthropicConnector.completar({
+      system: 'Eres un copywriter experto en email marketing en español.',
+      prompt: `Genera SOLO el asunto de un email (máximo 8 palabras, en español) para este objetivo: ${objetivo}. Solo el asunto, sin comillas ni explicaciones.`,
+      maxTokens: 50,
+    }).catch(() => objetivo);
+
+    const cuerpo = await AnthropicConnector.completar({
+      system: 'Eres un copywriter experto en email marketing para el mercado hispano en USA.',
+      prompt,
+      maxTokens: 800,
+    });
+
+    await ResendConnector.enviarEmailManual({ para, nombre, asunto: asuntoFinal, cuerpo });
+
+    await TelegramConnector.notificar(
+      `📧 <b>Email enviado</b>\n` +
+      `Para: ${nombre || para} (${para})\n` +
+      `Asunto: ${asuntoFinal}\n` +
+      `Objetivo: ${objetivo}`
+    ).catch(() => {});
+
+    return `Email enviado a ${nombre || para} (${para}). Asunto: "${asuntoFinal}".`;
   },
 
   async rechazar_nicho({ nicho_json }) {

@@ -317,6 +317,47 @@ export const ResendConnector = {
     });
     if (error) throw new Error(error.message);
   },
+
+  // ── Email manual redactado por Jarvis ───────────────
+  async enviarEmailManual({ para, nombre, asunto, cuerpo }) {
+    if (!this.disponible()) throw new Error('RESEND_API_KEY no configurado');
+    const resend      = await getResend();
+    const saludo      = nombre ? `Hola <strong style="color:#00ff88;">${nombre}</strong>` : 'Hola';
+    const firmaNombre = FROM_NAME();
+    const firmaEmail  = FROM();
+
+    const parrafos = cuerpo
+      .split('\n')
+      .filter(l => l.trim())
+      .map(l => `<p style="color:#ccc;line-height:1.8;margin:0 0 16px;">${l}</p>`)
+      .join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#0f0f0f;">
+<div style="max-width:600px;margin:40px auto;background:#1a1a1a;border-radius:12px;overflow:hidden;border:1px solid #222;">
+  <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:36px 32px;text-align:center;border-bottom:3px solid #00ff88;">
+    <h1 style="color:#fff;margin:0;font-size:1.4em;">${asunto}</h1>
+  </div>
+  <div style="padding:40px 32px;">
+    <p style="font-size:1.05em;color:#e0e0e0;margin:0 0 24px;">${saludo},</p>
+    ${parrafos}
+  </div>
+  <div style="background:#111;padding:20px 32px;text-align:center;border-top:1px solid #222;">
+    <p style="color:#444;font-size:0.8em;margin:0;">${firmaNombre} · <a href="mailto:${firmaEmail}" style="color:#555;">${firmaEmail}</a></p>
+  </div>
+</div>
+</body></html>`;
+
+    const { error } = await resend.emails.send({
+      from:    `${firmaNombre} <${firmaEmail}>`,
+      to:      para,
+      subject: asunto,
+      html,
+    });
+
+    if (error) throw new Error(error.message);
+    return { ok: true, para, asunto };
+  },
 };
 
 // ── HTML de entrega de producto ────────────────────
