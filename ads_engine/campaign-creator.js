@@ -144,7 +144,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
   // 1. Campaña
   const campana = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/campaigns`, {
     name:                   nombre,
-    objective:              'LEAD_GENERATION',
+    objective:              'OUTCOME_LEADS',
     status:                 'PAUSED',
     special_ad_categories:  [],
   });
