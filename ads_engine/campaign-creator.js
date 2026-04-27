@@ -73,7 +73,7 @@ export async function generarYSubirImagen(prompt) {
   fs.writeFileSync(tmp, buf);
   const hash = await subirFotoLocal(tmp);
   fs.unlinkSync(tmp);
-  return hash;
+  return { hash, url };
 }
 
 // ── Crear formulario nativo de Lead Ads ─────────────

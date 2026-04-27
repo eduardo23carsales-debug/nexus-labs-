@@ -376,12 +376,14 @@ Lista qué productos se están vendiendo, cuántas ventas tienen, y cuánto reve
     name: 'pipeline_completo',
     description: `Pipeline completo de producto digital: busca nicho → genera producto → crea imagen de portada → lanza campaña en Meta Ads.
 Todo en un solo comando. Tarda ~10 minutos porque genera el producto completo.
-Úsalo cuando Eduardo diga "lanza todo", "haz el proceso completo", "busca nicho y lanza campaña", "arranca el pipeline", etc.`,
+Úsalo cuando Eduardo diga "lanza todo", "haz el proceso completo", "busca nicho y lanza campaña", "arranca el pipeline", etc.
+Si Eduardo menciona una idea o tema específico (ej: "ganar $1000 con IA", "fitness para latinos"), pásalo como enfoque.`,
     input_schema: {
       type: 'object',
       properties: {
         presupuesto: { type: 'number', description: 'Presupuesto diario en USD para la campaña de Meta Ads. Default: 10' },
         segmento:    { type: 'string', description: 'Segmento de Meta Ads. Default: emprendedor-principiante' },
+        enfoque:     { type: 'string', description: 'Idea o tema específico de Eduardo para el producto. Si lo menciona, úsalo aquí.' },
       },
     },
   },
@@ -908,7 +910,7 @@ export const TOOL_HANDLERS = {
     }
   },
 
-  async pipeline_completo({ presupuesto = 10, segmento = 'emprendedor-principiante' } = {}) {
+  async pipeline_completo({ presupuesto = 10, segmento = 'emprendedor-principiante', enfoque = null } = {}) {
     global._cancelarPipeline = false;
     const btnCancelar = TelegramConnector.teclado([[{ text: '🛑 Cancelar pipeline', callback_data: 'cancelar_pipeline' }]]);
     const notif = (m) => TelegramConnector.notificar(m, btnCancelar).catch(() => {});
@@ -916,10 +918,10 @@ export const TOOL_HANDLERS = {
 
     try {
       // Paso 1: Investigar nicho
-      await notif('🔍 <b>Pipeline iniciado</b>\n\nPaso 1/4 — Buscando el mejor nicho...');
+      await notif(`🔍 <b>Pipeline iniciado</b>${enfoque ? `\n💡 Enfoque: ${enfoque}` : ''}\n\nPaso 1/4 — Buscando el mejor nicho...`);
       let nicho;
       try {
-        nicho = await investigarNicho();
+        nicho = await investigarNicho(enfoque);
       } catch (err) {
         await notif(`❌ <b>Pipeline falló en Paso 1</b> (investigar nicho)\n<code>${esc(err.message)}</code>`);
         throw err;
@@ -992,7 +994,9 @@ export const TOOL_HANDLERS = {
           `dark premium background, bold white title text, modern design,`,
           `ebook or course mockup style, high quality marketing image`,
         ].join(' ');
-        imagenHash = await generarYSubirImagen(promptImagen);
+        const imagen = await generarYSubirImagen(promptImagen);
+        imagenHash = imagen.hash;
+        await TelegramConnector.notificarFoto(imagen.url, `🖼️ <b>Portada generada para "${nicho.nombre_producto}"</b>`).catch(() => {});
         await notif(`✅ <b>Imagen de portada creada</b>\n\nPaso 4/4 — Lanzando campaña en Meta Ads con $${presupuesto}/día...`);
       } catch (err) {
         await notif(`⚠️ Imagen falló (${err.message}), usando imagen genérica del segmento.\n\nPaso 4/4 — Lanzando campaña...`);

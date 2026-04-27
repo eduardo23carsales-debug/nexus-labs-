@@ -41,6 +41,20 @@ export const TelegramConnector = {
     }
   },
 
+  // Enviar foto por URL al chat principal
+  async notificarFoto(urlOPath, caption = '') {
+    const bot = getTelegramBot();
+    if (!bot || !ENV.TELEGRAM_CHAT_ID) return;
+    try {
+      return await bot.sendPhoto(ENV.TELEGRAM_CHAT_ID, urlOPath, {
+        caption,
+        parse_mode: 'HTML',
+      });
+    } catch (err) {
+      console.error('[Telegram] Error al enviar foto:', err.message);
+    }
+  },
+
   // Construir teclado inline de botones
   teclado(filas) {
     return { reply_markup: { inline_keyboard: filas } };
