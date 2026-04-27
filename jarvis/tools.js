@@ -386,6 +386,20 @@ Lista qué productos se están vendiendo, cuántas ventas tienen, y cuánto reve
   },
 
   {
+    name: 'generar_contenido_producto',
+    description: `Genera el contenido del mini_curso o guía para un producto que no tiene contenido generado aún.
+Úsalo cuando Eduardo diga "genera el contenido", "el producto no tiene contenido", "crea el curso", "genera el producto X".
+También cuando ver_producto muestre "Sin contenido generado".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID numérico del experimento' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  {
     name: 'pipeline_completo',
     description: `Pipeline completo de producto digital: busca nicho → genera producto → crea imagen de portada → lanza campaña en Meta Ads.
 Todo en un solo comando. Tarda ~10 minutos porque genera el producto completo.
@@ -900,6 +914,50 @@ export const TOOL_HANDLERS = {
 
     await TelegramConnector.notificar(respuesta).catch(() => {});
     return respuesta;
+  },
+
+  async generar_contenido_producto({ nombre_o_id }) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    let exp = null;
+    const id = parseInt(nombre_o_id);
+    if (!isNaN(id)) exp = await ExperimentsDB.obtener(id);
+    if (!exp) {
+      const lista = await ExperimentsDB.listar('activo');
+      exp = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+    }
+    if (!exp) return `No encontré producto con "${nombre_o_id}".`;
+
+    await notif(`⚡ <b>Generando contenido de "${esc(exp.nombre)}"...</b>\nEsto tarda ~3-4 minutos.`);
+
+    const nicho = {
+      nombre_producto:       exp.nombre,
+      nicho:                 exp.nicho || exp.nombre,
+      tipo:                  exp.tipo || 'mini_curso',
+      precio:                exp.precio || 47,
+      subtitulo:             exp.descripcion || 'Aprende a generar tus primeros ingresos digitales',
+      subgrupo_latino:       'Latinos emprendedores en USA',
+      cliente_ideal:         'Emprendedor hispano entre 25-45 años en USA que quiere ingresos digitales',
+      problema_que_resuelve: 'No saber por dónde empezar a generar dinero online con IA',
+      herramientas_clave:    ['ChatGPT (gratis)', 'Canva (gratis)', 'Gumroad (gratis)', 'Stripe ($0.30+2.9%)'],
+      quick_win:             'Configurar tu primera herramienta de IA y crear un producto simple en 60 minutos',
+      ejemplo_exito:         'Carlos, 32 años, Miami — generó $800 en su primer mes vendiendo prompts de ChatGPT',
+      modulos_temas:         ['Fundamentos de IA para negocios', 'Crea tu primer producto digital', 'Vende sin audiencia previa', 'Automatiza y escala', 'Próximos pasos'],
+    };
+
+    const html = await generarProducto(nicho);
+    await ExperimentsDB.actualizarContenido(exp.id, html);
+
+    const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+    const accesoUrl = exp.landing_slug ? `${dominio}/acceso/${exp.landing_slug}` : null;
+
+    await notif(
+      `✅ <b>Contenido generado</b> (${Math.round(html.length / 1024)} KB)\n` +
+      `📦 ${exp.nombre}\n` +
+      (accesoUrl ? `🎓 Ver producto: ${accesoUrl}` : `⚠️ Sin slug — relanza con Stripe para activar URL`)
+    );
+
+    return `Contenido generado para "${exp.nombre}" — ${Math.round(html.length / 1024)} KB. ${accesoUrl ? `Acceso: ${accesoUrl}` : ''}`;
   },
 
   async relanzar_producto({ nombre_o_id, presupuesto = 10, segmento = 'emprendedor-principiante' }) {

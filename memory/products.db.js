@@ -129,6 +129,14 @@ export const ExperimentsDB = {
     ).catch(() => {});
   },
 
+  async actualizarContenido(id, contenidoProducto) {
+    if (!process.env.DATABASE_URL) return;
+    await query(
+      `UPDATE experiments SET contenido_producto = $1, actualizado_en = NOW() WHERE id = $2`,
+      [contenidoProducto, id]
+    ).catch(() => {});
+  },
+
   // Buscar experimentos con más de 72h sin decisión
   async pendientesDecision() {
     if (!process.env.DATABASE_URL) return [];
