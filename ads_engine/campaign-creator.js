@@ -81,38 +81,17 @@ async function crearFormulario(segmento) {
   const seg = SEGMENTOS[segmento];
   const nombre = `Nexus Labs —${seg.nombre} — ${Date.now()}`;
 
+  const baseUrl = `https://${ENV.RAILWAY_DOMAIN || 'nexuslabs.com'}`;
   const data = await MetaConnector.post(`/${ENV.META_PAGE_ID}/leadgen_forms`, {
-    name: nombre,
-    privacy_policy: { url: `https://${ENV.RAILWAY_DOMAIN || 'nexuslabs.com'}/privacidad`, link_text: 'Política de Privacidad' },
+    name:                  nombre,
+    privacy_policy:        { url: `${baseUrl}/privacidad` },
+    follow_up_action_url:  baseUrl,
     questions: [
       { type: 'FULL_NAME' },
-      { type: 'PHONE' },
-      { type: 'EMAIL' },
-      { key: 'experiencia', label: '¿Cuál es tu nivel de experiencia en negocios digitales?', type: 'CUSTOM',
-        options: [
-          { key: 'cero',        value: 'Estoy empezando desde cero' },
-          { key: 'basico',      value: 'Tengo algo de experiencia' },
-          { key: 'intermedio',  value: 'Ya vendo online, quiero escalar' },
-          { key: 'avanzado',    value: 'Tengo un negocio digital activo' },
-        ]
-      },
-      { key: 'objetivo', label: '¿Cuál es tu principal objetivo?', type: 'CUSTOM',
-        options: [
-          { key: 'ingresos_extra', value: 'Generar ingresos extra además de mi trabajo' },
-          { key: 'reemplazar',     value: 'Reemplazar mi empleo con un negocio propio' },
-          { key: 'escalar',        value: 'Escalar un negocio que ya tengo' },
-          { key: 'aprender',       value: 'Aprender el sistema antes de decidir' },
-        ]
-      },
+      { type: 'PHONE'     },
+      { type: 'EMAIL'     },
     ],
-    thank_you_page: {
-      title:       '¡Listo! Te contactamos en minutos',
-      body:        'Eduardo te llamará personalmente para mostrarte cómo funciona el sistema.',
-      button_type: 'VIEW_WEBSITE',
-      website_url: `https://${ENV.RAILWAY_DOMAIN || 'nexuslabs.com'}`,
-    },
-    locale:             'ES_LA',
-    is_optimized_for_quality: true,
+    locale: 'ES_LA',
   });
   return data.id;
 }
