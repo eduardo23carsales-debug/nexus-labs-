@@ -890,10 +890,10 @@ export const TOOL_HANDLERS = {
     const id = parseInt(nombre_o_id);
     if (!isNaN(id)) {
       exp = await ExperimentsDB.obtener(id);
-    }
-    if (!exp) {
+    } else {
       const lista = await ExperimentsDB.listar('activo');
-      exp = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+      const found = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+      if (found?.id) exp = await ExperimentsDB.obtener(found.id);
     }
     if (!exp) return `No encontré producto con "${nombre_o_id}". Usa ver_experimentos para ver los disponibles.`;
 
@@ -921,10 +921,12 @@ export const TOOL_HANDLERS = {
 
     let exp = null;
     const id = parseInt(nombre_o_id);
-    if (!isNaN(id)) exp = await ExperimentsDB.obtener(id);
-    if (!exp) {
+    if (!isNaN(id)) {
+      exp = await ExperimentsDB.obtener(id);
+    } else {
       const lista = await ExperimentsDB.listar('activo');
-      exp = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+      const found = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+      if (found?.id) exp = await ExperimentsDB.obtener(found.id);
     }
     if (!exp) return `No encontré producto con "${nombre_o_id}".`;
 
