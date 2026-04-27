@@ -125,7 +125,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
   const campana = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/campaigns`, {
     name:                              nombre,
     objective:                         'OUTCOME_LEADS',
-    status:                            'PAUSED',
+    status:                            'ACTIVE',
     special_ad_categories:             [],
     is_adset_budget_sharing_enabled:   false,
   });
@@ -196,6 +196,12 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
       console.error(`[AdsEngine] Error en copy ${copy.tipo}:`, err.message);
     }
   }
+
+  if (ads.length === 0) {
+    throw new Error(`Campaña creada (${campana.id}) pero ningún ad se pudo crear. Revisa los logs de adsets.`);
+  }
+
+  console.log(`[AdsEngine] Campaña lista: ${ads.length}/${seg.copies.length} ads creados`);
 
   return {
     campaign_id:  campana.id,
