@@ -143,10 +143,11 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
 
   // 1. Campaña
   const campana = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/campaigns`, {
-    name:                   nombre,
-    objective:              'OUTCOME_LEADS',
-    status:                 'PAUSED',
-    special_ad_categories:  [],
+    name:                              nombre,
+    objective:                         'OUTCOME_LEADS',
+    status:                            'PAUSED',
+    special_ad_categories:             [],
+    is_adset_budget_sharing_enabled:   false,
   });
 
   // 2. Asset (imagen override > video > foto > DALL-E)

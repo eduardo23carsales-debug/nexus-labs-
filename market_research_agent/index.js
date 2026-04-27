@@ -142,7 +142,7 @@ Devuelve JSON:
 {
   "nicho": "descripción del nicho en una línea",
   "subgrupo_latino": "latinos en USA que quieren ingresos digitales",
-  "tipo": "guia_pdf",
+  "tipo": "mini_curso",
   "nombre_producto": "nombre exacto o muy cercano a la idea de Eduardo",
   "subtitulo": "resultado concreto: qué logra, en cuánto tiempo, sin qué requisito",
   "precio": 47,
