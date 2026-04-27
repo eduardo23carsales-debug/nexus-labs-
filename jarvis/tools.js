@@ -19,7 +19,7 @@ import { PlansDB }                              from '../memory/plans.db.js';
 import { ejecutarPlan }                          from '../agents/ejecutor/index.js';
 import { generarReporte }                       from '../reporting/index.js';
 import { construirLanding }                     from './landing-builder.js';
-import { investigarNicho }                      from '../market_research_agent/index.js';
+import { investigarNicho, construirNichoDesdeIdea } from '../market_research_agent/index.js';
 import { generarProducto }                      from '../product_engine/index.js';
 import { publicarConStripe }                    from '../product_engine/publisher.js';
 import { HotmartConnector }                     from '../connectors/hotmart.connector.js';
@@ -383,7 +383,7 @@ Si Eduardo menciona una idea o tema específico (ej: "ganar $1000 con IA", "fitn
       properties: {
         presupuesto: { type: 'number', description: 'Presupuesto diario en USD para la campaña de Meta Ads. Default: 10' },
         segmento:    { type: 'string', description: 'Segmento de Meta Ads. Default: emprendedor-principiante' },
-        enfoque:     { type: 'string', description: 'Idea o tema específico de Eduardo para el producto. Si lo menciona, úsalo aquí.' },
+        enfoque:     { type: 'string', description: 'Producto o idea EXACTA de Eduardo. Si menciona un producto específico (ej: "ganar $1000 con IA en 30 días"), pásalo aquí y el sistema lo construye SIN investigar alternativas.' },
       },
     },
   },
@@ -918,10 +918,10 @@ export const TOOL_HANDLERS = {
 
     try {
       // Paso 1: Investigar nicho
-      await notif(`🔍 <b>Pipeline iniciado</b>${enfoque ? `\n💡 Enfoque: ${enfoque}` : ''}\n\nPaso 1/4 — Buscando el mejor nicho...`);
+      await notif(`🔍 <b>Pipeline iniciado</b>${enfoque ? `\n💡 Producto: ${enfoque}` : ''}\n\nPaso 1/4 — ${enfoque ? 'Construyendo producto exacto...' : 'Buscando el mejor nicho...'}`);
       let nicho;
       try {
-        nicho = await investigarNicho(enfoque);
+        nicho = enfoque ? await construirNichoDesdeIdea(enfoque) : await investigarNicho();
       } catch (err) {
         await notif(`❌ <b>Pipeline falló en Paso 1</b> (investigar nicho)\n<code>${esc(err.message)}</code>`);
         throw err;

@@ -125,6 +125,46 @@ Devuelve JSON:
 }
 
 // ── Función principal exportada ──────────────────────
+// ── Construir nicho directamente desde idea exacta de Eduardo ─
+export async function construirNichoDesdeIdea(idea) {
+  console.log(`[Researcher] Modo exacto — construyendo nicho desde: "${idea}"`);
+
+  const nicho = await AnthropicConnector.completarJSONConReintentos({
+    model:     'claude-sonnet-4-6',
+    maxTokens: 2500,
+    system:    SYSTEM,
+    prompt:    `Eduardo quiere crear EXACTAMENTE este producto: "${idea}"
+
+No lo cambies, no lo reinterpretes, no busques una variación mejor.
+Construye el nicho completo usando ESTA idea como nombre/concepto base.
+
+Devuelve JSON:
+{
+  "nicho": "descripción del nicho en una línea",
+  "subgrupo_latino": "latinos en USA que quieren ingresos digitales",
+  "tipo": "guia_pdf",
+  "nombre_producto": "nombre exacto o muy cercano a la idea de Eduardo",
+  "subtitulo": "resultado concreto: qué logra, en cuánto tiempo, sin qué requisito",
+  "precio": 47,
+  "problema_que_resuelve": "el dolor en palabras del cliente",
+  "cliente_ideal": "nombre ficticio + edad + ciudad + situación + por qué necesita esto HOY",
+  "puntos_de_venta": ["resultado concreto con número", "resultado 2", "resultado 3"],
+  "quick_win": "acción exacta en los primeros 30 minutos y resultado al terminar",
+  "herramientas_clave": ["Herramienta (gratis/$X/mes)", "Herramienta2", "Herramienta3"],
+  "modulos_temas": ["Tema específico", "Tema 2", "Tema 3", "Tema 4", "Tema 5"],
+  "ejemplo_exito": "nombre latino + ciudad + situación inicial + resultado con números",
+  "score": 85,
+  "razon_score": "producto solicitado directamente por Eduardo",
+  "razon": "idea específica del fundador basada en conocimiento del mercado",
+  "formato_ad_recomendado": "feed",
+  "razon_formato": "feed para producto de transformación con historia"
+}`,
+  });
+
+  console.log(`[Researcher] Nicho exacto construido: "${nicho.nombre_producto}"`);
+  return nicho;
+}
+
 export async function investigarNicho(enfoque = null) {
   console.log(`[Researcher] Iniciando búsqueda${enfoque ? ` — enfoque: "${enfoque}"` : ''}...`);
 
