@@ -1327,13 +1327,20 @@ export const TOOL_HANDLERS = {
           const cuerpoConPixel = cuerpoTracking + `\n<img src="${pixelUrl}" width="1" height="1" style="display:none">`;
 
           const bajaUrl = `${dominioBase}/baja/${emailEnc}`;
-          const cuerpoFinal = cuerpoConPixel + `\n\n_Si no deseas recibir más emails, [haz click aquí](${bajaUrl})_`;
+          const cuerpoFinal = cuerpoConPixel + `\n\nSi no deseas recibir más emails escríbenos a ${ENV.EMAIL_FROM || 'hola@gananciasconai.com'} con el asunto BAJA.`;
+
+          const clickUrl = landingUrl
+            ? `${dominioBase}/track/click/${campaign.id}/${emailEnc}?url=${encodeURIComponent(landingUrl)}`
+            : (exp?.stripe_payment_link || null);
+          const textoBtnCampaña = exp?.precio ? `🛒 Quiero acceder por $${exp.precio}` : '🛒 Quiero acceder ahora';
 
           await ResendConnector.enviarEmailManual({
-            para:   c.email,
-            nombre: c.nombre,
+            para:       c.email,
+            nombre:     c.nombre,
             asunto,
-            cuerpo: cuerpoFinal,
+            cuerpo:     cuerpoFinal,
+            urlBoton:   clickUrl,
+            textoBoton: textoBtnCampaña,
           });
           enviados++;
         } catch {
@@ -1387,18 +1394,23 @@ export const TOOL_HANDLERS = {
       } catch {}
     }
 
-    // Detectar si el objetivo menciona un producto y extraer su landing URL
+    // Detectar producto activo y extraer Stripe link para el botón
     try {
       const experimentos = await ExperimentsDB.listar('activo');
       const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
-      const exp = experimentos.find(e =>
-        objetivo.toLowerCase().includes(e.nombre.toLowerCase().substring(0, 15))
+      // Buscar por nombre (cualquier palabra del producto en el objetivo)
+      let exp = experimentos.find(e =>
+        e.nombre.toLowerCase().split(' ').some(w => w.length > 4 && objetivo.toLowerCase().includes(w))
       );
-      if (exp?.landing_slug) {
-        urlBoton   = `${dominio}/p/${exp.landing_slug}`;
-        textoBoton = `🛒 Quiero acceder por $${exp.precio}`;
-      } else if (exp?.stripe_payment_link) {
+      // Fallback: usar el experimento más reciente con Stripe link
+      if (!exp) exp = experimentos.find(e => e.stripe_payment_link);
+      if (!exp) exp = experimentos[0];
+
+      if (exp?.stripe_payment_link) {
         urlBoton   = exp.stripe_payment_link;
+        textoBoton = `🛒 Quiero acceder por $${exp.precio}`;
+      } else if (exp?.landing_slug) {
+        urlBoton   = `${dominio}/p/${exp.landing_slug}`;
         textoBoton = `🛒 Quiero acceder por $${exp.precio}`;
       }
     } catch {}

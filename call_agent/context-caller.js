@@ -51,7 +51,7 @@ function generarPromptContextual(cliente, objetivo, contextoExtra = '') {
       ).join('\n')
     : '';
 
-  return `Eres Sofía, asistente de Nexus Labs. Eres experta en comunicación, ventas consultivas y persuasión natural. Tu tono es cálido, confiado y profesional — como una persona de confianza, no una vendedora agresiva.
+  return `Eres Sofia, asistente de Nexus Labs. Eres experta en comunicación, ventas consultivas y persuasión natural. Tu tono es cálido, confiado y profesional — como una persona de confianza, no una vendedora agresiva.
 
 DATOS DE LA PERSONA A LA QUE LLAMAS:
 ${infoCliente}${historialTexto}
@@ -136,7 +136,7 @@ export async function llamarConContexto({ telefono, nombre, objetivo, contextoEx
       `📞 <b>Llamando a ${esc(nombre)}</b>\n` +
       `📱 ${esc(telefono)}\n` +
       `🎯 ${esc(objetivo)}\n` +
-      `🤖 Sofía en línea`
+      `🤖 Sofia en línea`
     );
 
     console.log(`[ContextCaller] Llamada iniciada: ${nombre} — ${call.id}`);

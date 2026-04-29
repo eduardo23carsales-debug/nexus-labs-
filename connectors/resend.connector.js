@@ -230,9 +230,11 @@ export const ResendConnector = {
   <div style="padding:40px 32px;">
     <p style="font-size:1.1em;color:#e0e0e0;margin:0 0 16px;">${saludo},</p>
     <p style="color:#aaa;line-height:1.8;margin:0 0 24px;">Notamos que empezaste a adquirir <strong style="color:#fff;">${producto}</strong> pero no completaste tu compra. Si hubo algún problema técnico o tienes dudas, responde este email y te ayudamos de inmediato.</p>
-    <div style="text-align:center;margin:32px 0;">
-      <a href="${linkPago}" style="background:#f0a500;color:#000;padding:18px 40px;font-size:1.1em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;">Completar mi compra — $${precio}</a>
-    </div>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:32px auto;">
+      <tr><td align="center" style="border-radius:8px;background:#f0a500;">
+        <a href="${linkPago}" target="_blank" style="background:#f0a500;color:#000;padding:18px 40px;font-size:1.1em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;mso-padding-alt:0;">Completar mi compra — $${precio}</a>
+      </td></tr>
+    </table>
   </div>
   <div style="background:#111;padding:20px 32px;text-align:center;border-top:1px solid #222;">
     <p style="color:#444;font-size:0.8em;margin:0;">${FROM_NAME()} · Responde si necesitas ayuda</p>
@@ -259,9 +261,11 @@ export const ResendConnector = {
   <div style="padding:40px 32px;">
     <p style="font-size:1.1em;color:#e0e0e0;margin:0 0 16px;">${saludo},</p>
     <p style="color:#aaa;line-height:1.8;margin:0 0 32px;">Ayer casi adquiriste <strong style="color:#fff;">${producto}</strong>. No sabemos cuánto tiempo más estará disponible a este precio.</p>
-    <div style="text-align:center;margin:32px 0;">
-      <a href="${linkPago}" style="background:#ff4444;color:#fff;padding:18px 40px;font-size:1.15em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;">Quiero mi acceso ahora — $${precio}</a>
-    </div>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:32px auto;">
+      <tr><td align="center" style="border-radius:8px;background:#ff4444;">
+        <a href="${linkPago}" target="_blank" style="background:#ff4444;color:#fff;padding:18px 40px;font-size:1.15em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;mso-padding-alt:0;">Quiero mi acceso ahora — $${precio}</a>
+      </td></tr>
+    </table>
     <div style="background:#1a0d0d;border:1px solid #ff4444;border-radius:8px;padding:16px;text-align:center;">
       <p style="margin:0;color:#ff8888;font-size:0.9em;">⚠️ Este es el último recordatorio que te enviaremos.</p>
     </div>
@@ -274,7 +278,7 @@ export const ResendConnector = {
   async _seq_seq_d1({ para, nombre, producto, productoUrl }) {
     const resend = await getResend();
     const saludo = nombre ? `Hola <strong style="color:#00ff88;">${nombre}</strong>` : 'Hola';
-    const boton  = productoUrl ? `<div style="text-align:center;margin:32px 0;"><a href="${productoUrl}" style="background:#00ff88;color:#000;padding:16px 36px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;">📖 Abrir mi producto</a></div>` : '';
+    const boton  = productoUrl ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:32px auto;"><tr><td align="center" style="border-radius:8px;background:#00ff88;"><a href="${productoUrl}" target="_blank" style="background:#00ff88;color:#000;padding:16px 36px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;mso-padding-alt:0;">📖 Abrir mi producto</a></td></tr></table>` : '';
     const { error } = await resend.emails.send({
       from: `${FROM_NAME()} <${FROM()}>`, to: para,
       subject: `🚀 Empieza aquí — tu primer resultado con "${producto}"`,
@@ -286,7 +290,7 @@ export const ResendConnector = {
   async _seq_seq_d3({ para, nombre, producto, productoUrl }) {
     const resend = await getResend();
     const saludo = nombre ? `Hola <strong style="color:#00ff88;">${nombre}</strong>` : 'Hola';
-    const boton  = productoUrl ? `<div style="text-align:center;margin:32px 0;"><a href="${productoUrl}" style="background:#4f8ef7;color:#fff;padding:16px 36px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;">▶ Continuar donde lo dejé</a></div>` : '';
+    const boton  = productoUrl ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:32px auto;"><tr><td align="center" style="border-radius:8px;background:#4f8ef7;"><a href="${productoUrl}" target="_blank" style="background:#4f8ef7;color:#fff;padding:16px 36px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;mso-padding-alt:0;">▶ Continuar donde lo dejé</a></td></tr></table>` : '';
     const { error } = await resend.emails.send({
       from: `${FROM_NAME()} <${FROM()}>`, to: para,
       subject: `¿Ya aplicaste "${producto}"? Esto te va a ayudar`,
@@ -298,7 +302,7 @@ export const ResendConnector = {
   async _seq_seq_d7({ para, nombre, producto, productoUrl }) {
     const resend = await getResend();
     const saludo = nombre ? `Hola <strong style="color:#00ff88;">${nombre}</strong>` : 'Hola';
-    const boton  = productoUrl ? `<div style="text-align:center;margin:32px 0;"><a href="${productoUrl}" style="background:#00ff88;color:#000;padding:16px 36px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;">📖 Seguir aprendiendo</a></div>` : '';
+    const boton  = productoUrl ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:32px auto;"><tr><td align="center" style="border-radius:8px;background:#00ff88;"><a href="${productoUrl}" target="_blank" style="background:#00ff88;color:#000;padding:16px 36px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;mso-padding-alt:0;">📖 Seguir aprendiendo</a></td></tr></table>` : '';
     const { error } = await resend.emails.send({
       from: `${FROM_NAME()} <${FROM()}>`, to: para,
       subject: `🏆 Una semana con "${producto}" — ¿cuál fue tu resultado?`,
@@ -353,9 +357,11 @@ export const ResendConnector = {
       .join('');
 
     const botonHtml = urlDetectada
-      ? `<div style="text-align:center;margin:32px 0;">
-          <a href="${urlDetectada}" style="background:#00ff88;color:#000;padding:16px 36px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;">${textoBoton}</a>
-        </div>`
+      ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:32px auto;">
+          <tr><td align="center" style="border-radius:8px;background:#00ff88;">
+            <a href="${urlDetectada}" target="_blank" style="background:#00ff88;color:#000;padding:16px 36px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;mso-padding-alt:0;">${textoBoton}</a>
+          </td></tr>
+        </table>`
       : '';
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
@@ -391,10 +397,12 @@ export const ResendConnector = {
 function _htmlEntrega({ nombreCliente, nombreProducto, contenido, productoUrl, stripePaymentId }) {
   const saludo = nombreCliente ? `Hola <strong style="color:#00ff88;">${nombreCliente}</strong>` : 'Hola';
   const cuerpo = productoUrl
-    ? `<div style="text-align:center;margin:32px 0;">
-        <a href="${productoUrl}" style="background:#00ff88;color:#000;padding:18px 40px;font-size:1.15em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;">🚀 Abrir mi producto ahora</a>
-        <p style="color:#666;font-size:0.85em;margin:12px 0 0;">Guarda este link — es tu acceso permanente</p>
-      </div>
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:32px auto;">
+        <tr><td align="center" style="border-radius:8px;background:#00ff88;">
+          <a href="${productoUrl}" target="_blank" style="background:#00ff88;color:#000;padding:18px 40px;font-size:1.15em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;mso-padding-alt:0;">🚀 Abrir mi producto ahora</a>
+        </td></tr>
+      </table>
+      <p style="text-align:center;color:#666;font-size:0.85em;margin:8px 0 0;">Guarda este link — es tu acceso permanente</p>
       <div style="background:#0d1f0d;border:1px solid #00ff88;border-radius:8px;padding:20px;margin:24px 0;">
         <p style="margin:0;color:#00ff88;font-size:0.95em;">📌 <strong>Tu link:</strong><br><a href="${productoUrl}" style="color:#00ff88;">${productoUrl}</a></p>
       </div>`

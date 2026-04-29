@@ -36,7 +36,7 @@ export async function llamarLead({ nombre, telefono, segmento }) {
       `📞 <b>Llamando a ${esc(nombre)}</b>\n` +
       `📱 ${esc(telefono)}\n` +
       `🎯 ${esc(segTexto)}\n` +
-      `🤖 Sofía en línea...`
+      `🤖 Sofia en línea...`
     );
 
     console.log(`[Caller] Llamada iniciada: ${call.id}`);

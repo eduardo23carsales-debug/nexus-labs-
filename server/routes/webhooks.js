@@ -112,6 +112,7 @@ router.post('/vapi/webhook', async (req, res) => {
   res.sendStatus(200);
   try {
     const msg = req.body?.message;
+    console.log(`[Webhook VAPI] tipo=${msg?.type} endedReason=${msg?.call?.endedReason || '—'} cliente=${msg?.call?.customer?.name || '—'}`);
     if (msg?.type !== 'end-of-call-report') return;
 
     const call     = msg.call || {};

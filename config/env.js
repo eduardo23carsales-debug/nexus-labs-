@@ -47,6 +47,7 @@ export const ENV = {
   // IA
   ANTHROPIC_API_KEY:      optional('ANTHROPIC_API_KEY'),
   OPENAI_API_KEY:         optional('OPENAI_API_KEY'),
+  ELEVEN_LABS_API_KEY:    optional('ELEVEN_LABS_API_KEY'),
 
   // Reglas de negocio
   PRESUPUESTO_MAX_DIA:    parseFloat(optional('PRESUPUESTO_MAX_DIA', '30')),

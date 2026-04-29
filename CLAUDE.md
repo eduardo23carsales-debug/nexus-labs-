@@ -13,7 +13,7 @@
 
 Sistema autónomo de marketing que opera como un equipo completo de empleados digitales:
 - **Genera leads** desde Meta Ads automáticamente
-- **Llama** a los leads con IA (Sofía, voz real por VAPI)
+- **Llama** a los leads con IA (Sofia, voz real por VAPI)
 - **Analiza** campañas cada mañana con Claude y propone un plan
 - **Ejecuta** el plan cuando Eduardo lo aprueba (o de forma autónoma si el cambio es pequeño)
 - **Supervisa** campañas cada 4 horas y ajusta presupuestos
@@ -50,7 +50,7 @@ connectors/
   anthropic.connector.js     → Claude (análisis, Jarvis)
   openai.connector.js        → DALL-E 3 (creativos)
   telegram.connector.js      → Bot de Telegram
-memory/                      → Persistencia JSON en /tmp (⚠️ se borra en redeploy)
+memory/                      → Módulos de acceso a PostgreSQL (persiste entre redeploys ✅)
   leads.db.js                → Leads: NUEVO→LLAMADO→CITA→CERRADO
   calls.db.js                → Historial de llamadas VAPI
   plans.db.js                → Plan del Analista (TTL 24h)
@@ -64,7 +64,7 @@ ads_engine/
   campaign-creator.js        → Crea Campaign+AdSets+Ads en Meta end-to-end
   campaign-manager.js        → Pausar, escalar, cambiar presupuesto
 call_agent/
-  sofia.config.js            → Config VAPI inline de Sofía (BDC leads)
+  sofia.config.js            → Config VAPI inline de Sofia (BDC leads)
   ana.config.js              → Config VAPI inline de Ana (briefing Eduardo)
   caller.js                  → llamarLead(), programarLlamada(), llamarBriefing()
   context-caller.js          → Llamada con datos CRM + prompt dinámico
@@ -96,8 +96,8 @@ sandbox/                     → Experimentos y pruebas (NO es código de produc
 ### Nunca hacer sin preguntar primero
 - Cambiar el nombre de negocio en `sofia.config.js` o `business.config.js` sin que el usuario confirme el nombre
 - Cambiar límites de presupuesto (`presupuestoMaxDia`, `limiteEscalarSolo`)
-- Modificar el prompt de Sofía o Ana (afecta directamente las llamadas a clientes reales)
-- Borrar o resetear archivos de memoria en `/tmp`
+- Modificar el prompt de Sofia o Ana (afecta directamente las llamadas a clientes reales)
+- Borrar o resetear registros en la base de datos PostgreSQL
 - Hacer push a Railway o Git
 
 ### Siempre verificar antes de proponer
@@ -138,9 +138,9 @@ sandbox/                     → Experimentos y pruebas (NO es código de produc
 | Servicio | Variable en .env | Uso |
 |----------|-----------------|-----|
 | Meta Graph API | `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID` | Campañas + Lead Ads + CAPI |
-| VAPI | `VAPI_API_KEY`, `VAPI_PHONE_NUMBER_ID` | Llamadas Sofía y Ana |
-| Anthropic Claude | `ANTHROPIC_API_KEY` | Analista + Jarvis |
-| OpenAI | `OPENAI_API_KEY` | DALL-E 3 (creativos) + GPT-4o-mini (Sofía) |
+| VAPI | `VAPI_API_KEY`, `VAPI_PHONE_NUMBER_ID` | Llamadas Sofia y Ana |
+| Anthropic Claude | `ANTHROPIC_API_KEY` | Analista + Jarvis + Sofia |
+| OpenAI | `OPENAI_API_KEY` | DALL-E 3 (creativos) |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Notificaciones + comandos |
 | ElevenLabs | `ELEVEN_LABS_API_KEY` | Voz de Ana |
 | Twilio | `TWILIO_*` | Configurado pero no usado aún |
@@ -155,7 +155,7 @@ Lead llena formulario → POST /api/lead
   → LeadsDB.guardar()
   → Meta CAPI evento "Lead"
   → Telegram notificación + botones
-  → setTimeout(5 min) → Sofía llama al lead por VAPI
+  → setTimeout(5 min) → Sofia llama al lead por VAPI
     → Webhook end-of-call → procesar resultado
       → Si cita: LeadsDB.marcarCitaAgendada() + WhatsApp auto
   → Asesor atiende cita → POST /api/venta
@@ -176,7 +176,7 @@ On-demand → Jarvis: Eduardo escribe en Telegram → Claude interpreta → ejec
 ## SANDBOX — EXPERIMENTOS DISPONIBLES
 
 ```bash
-node sandbox/index.js test-sofia     # Verificar config de Sofía
+node sandbox/index.js test-sofia     # Verificar config de Sofia
 node sandbox/index.js test-scoring   # Probar scoring de leads
 node sandbox/index.js test-plan      # Ver plan vigente en memoria
 node sandbox/index.js test-leads     # Resumen de leads y conversiones
@@ -187,9 +187,9 @@ node sandbox/index.js test-leads     # Resumen de leads y conversiones
 ## LO QUE FALTA DEFINIR (pendiente con el usuario)
 
 - [x] **Nombre del negocio** — ✅ Nexus Labs (reemplazo completado 2026-04-24)
+- [x] **Base de datos** — ✅ PostgreSQL en Railway (migrado de /tmp, persiste entre redeploys)
+- [x] **Dominio / URL pública** — ✅ gananciasconai.com (Resend verificado, webhooks activos)
+- [x] **Prompt de Sofia** — ✅ Renombrado de Sofía a Sofia, voz ElevenLabs estilo Jarvis
 - [ ] **Nicho(s) iniciales** — ¿solo automotriz? ¿otros desde el inicio?
-- [ ] **Prompt de Sofía** — actualizar con nombre real, ciudad, producto real
 - [ ] **Asesores reales** — nombres y WhatsApp en `business.config.js`
 - [ ] **Presupuesto real** — validar límites de Meta ($30/día, escalas)
-- [ ] **Base de datos** — decidir cuándo migrar de /tmp a PostgreSQL
-- [ ] **Dominio / URL pública** — para webhooks de VAPI y Meta
