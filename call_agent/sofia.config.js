@@ -155,10 +155,6 @@ REGLAS DE ORO:
     ],
     endpointing: 250,
   },
-  chunkPlan: {
-    enabled:       true,
-    minCharacters: 80,
-  },
   startSpeakingPlan: {
     waitSeconds: 1.0,
     smartEndpointingEnabled: true,
