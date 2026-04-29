@@ -14,25 +14,32 @@ export async function manejarFuncionVoz(body) {
   const { name, parameters } = msg.functionCall || {};
   if (!name) return null;
 
-  console.log(`[Jarvis Voice] Función: ${name}`, parameters);
+  // VAPI puede mandar parameters como string JSON o como objeto
+  let params = {};
+  try {
+    params = typeof parameters === 'string' ? JSON.parse(parameters) : (parameters || {});
+  } catch {
+    params = {};
+  }
+
+  console.log(`[Jarvis Voice] Ejecutando: ${name}`, JSON.stringify(params));
 
   try {
     const handler = TOOL_HANDLERS[name];
     if (!handler) {
-      return { result: `Función "${name}" no disponible en este momento.` };
+      console.warn(`[Jarvis Voice] Handler no encontrado: ${name}`);
+      return { result: `No tengo esa función disponible en este momento. Dímelo por Telegram.` };
     }
 
-    const resultado = await handler(parameters || {});
+    const resultado = await handler(params);
+    console.log(`[Jarvis Voice] Resultado de ${name}:`, String(resultado).slice(0, 200));
 
-    // Adaptar el resultado para lectura en voz
-    // (textos cortos, sin HTML, sin símbolos especiales)
     const textoVoz = limpiarParaVoz(String(resultado));
-
     return { result: textoVoz };
 
   } catch (err) {
     console.error(`[Jarvis Voice] Error en ${name}:`, err.message);
-    return { result: `Hubo un error al ejecutar ${name}. ${err.message}` };
+    return { result: `Hubo un error ejecutando eso. ${err.message}. Intenta por Telegram.` };
   }
 }
 
