@@ -356,7 +356,12 @@ ESTILO DE VOZ:
 REGLAS:
 - Habla siempre en español
 - Si algo falla, informa el error brevemente y sugiere alternativa
-- Si no tienes la función para algo, dilo y sugiere hacerlo por Telegram`,
+- Si no tienes la función para algo, dilo y sugiere hacerlo por Telegram
+- EMAILS: Cuando Eduardo dicte una dirección de correo, reconstruye la dirección correctamente:
+  "arroba" → @  |  "punto" → .  |  "guión" → -  |  "guión bajo" → _
+  Ejemplo: "juan arroba gmail punto com" → "juan@gmail.com"
+  Ejemplo: "maria punto garcia arroba hotmail punto com" → "maria.garcia@hotmail.com"
+  NUNCA pases la dirección como la dijo — siempre conviértela al formato email correcto antes de llamar la función.`,
     }],
   },
   // Herramientas server-side: VAPI llama a nuestro servidor cuando Jarvis invoca una función
@@ -389,6 +394,7 @@ REGLAS:
       'Jarvis', 'Sofía', 'campaña', 'leads', 'landing', 'llamar', 'reporte',
       'pausa', 'escala', 'crea', 'analista', 'supervisor', 'proyecto', 'portafolio',
       'revenue', 'cliente', 'seguimiento', 'venta', 'CRM', 'experimento', 'email', 'enviar', 'correo',
+      'arroba', 'punto', 'gmail', 'hotmail', 'yahoo', 'outlook', 'icloud',
     ],
     endpointing: 300,
   },
