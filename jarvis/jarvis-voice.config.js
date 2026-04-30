@@ -361,7 +361,9 @@ REGLAS:
   "arroba" → @  |  "punto" → .  |  "guión" → -  |  "guión bajo" → _
   Ejemplo: "juan arroba gmail punto com" → "juan@gmail.com"
   Ejemplo: "maria punto garcia arroba hotmail punto com" → "maria.garcia@hotmail.com"
-  NUNCA pases la dirección como la dijo — siempre conviértela al formato email correcto antes de llamar la función.`,
+  NUNCA pases la dirección como la dijo — siempre conviértela al formato email correcto antes de llamar la función.
+  IMPORTANTE: La palabra "correo" o "email" en español es solo una palabra para decir "dirección de correo electrónico" — NO es parte del username. Si Eduardo dice "mi correo" o "envíame" o "mándame a mí", usa su email conocido: eduardo23carsales@gmail.com
+  Si dice "el correo de Juan" busca a Juan en el CRM para obtener su email.`,
     }],
     // tools va DENTRO de model — VAPI llama a nuestro servidor cuando Jarvis invoca una función
     get tools() {
