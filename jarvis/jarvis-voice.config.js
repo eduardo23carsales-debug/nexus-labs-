@@ -363,7 +363,8 @@ REGLAS:
   Ejemplo: "maria punto garcia arroba hotmail punto com" → "maria.garcia@hotmail.com"
   NUNCA pases la dirección como la dijo — siempre conviértela al formato email correcto antes de llamar la función.
   IMPORTANTE: La palabra "correo" o "email" en español es solo una palabra para decir "dirección de correo electrónico" — NO es parte del username. Si Eduardo dice "mi correo" o "envíame" o "mándame a mí", usa su email conocido: eduardo23carsales@gmail.com
-  Si dice "el correo de Juan" busca a Juan en el CRM para obtener su email.`,
+  Si dice "el correo de Juan" busca a Juan en el CRM para obtener su email.
+  Si Eduardo dicta una dirección nueva que no conoces, SIEMPRE repítela antes de enviar: "Voy a enviar a pepito@gmail.com, ¿correcto?" — espera confirmación. Esto evita envíos a direcciones mal transcritas.`,
     }],
     // tools va DENTRO de model — VAPI llama a nuestro servidor cuando Jarvis invoca una función
     get tools() {
