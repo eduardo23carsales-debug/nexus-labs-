@@ -53,7 +53,7 @@ export async function manejarFuncionVoz(body) {
         result = `Hubo un error ejecutando eso. ${err.message}.`;
       }
 
-      results.push({ toolCallId: id, result });
+      results.push({ toolCallId: id, name, result });
     }
 
     // VAPI espera: { results: [{ toolCallId, result }] }

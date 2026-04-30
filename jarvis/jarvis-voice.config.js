@@ -363,21 +363,22 @@ REGLAS:
   Ejemplo: "maria punto garcia arroba hotmail punto com" → "maria.garcia@hotmail.com"
   NUNCA pases la dirección como la dijo — siempre conviértela al formato email correcto antes de llamar la función.`,
     }],
-  },
-  // Herramientas server-side: VAPI llama a nuestro servidor cuando Jarvis invoca una función
-  get tools() {
-    const url = process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api/vapi/jarvis`
-      : null;
-    return FUNCIONES_VAPI.map(f => ({
-      type: 'function',
-      function: {
-        name:        f.name,
-        description: f.description,
-        parameters:  f.parameters,
-      },
-      ...(url ? { server: { url } } : {}),
-    }));
+    // tools va DENTRO de model — VAPI llama a nuestro servidor cuando Jarvis invoca una función
+    get tools() {
+      const url = process.env.RAILWAY_PUBLIC_DOMAIN
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api/vapi/jarvis`
+        : null;
+      return FUNCIONES_VAPI.map(f => ({
+        type:  'function',
+        async: false,
+        function: {
+          name:        f.name,
+          description: f.description,
+          parameters:  f.parameters,
+        },
+        ...(url ? { server: { url } } : {}),
+      }));
+    },
   },
   voice: {
     provider:        '11labs',
