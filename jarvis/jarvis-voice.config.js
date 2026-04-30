@@ -358,7 +358,21 @@ REGLAS:
 - Si algo falla, informa el error brevemente y sugiere alternativa
 - Si no tienes la función para algo, dilo y sugiere hacerlo por Telegram`,
     }],
-    functions: FUNCIONES_VAPI,
+  },
+  // Herramientas server-side: VAPI llama a nuestro servidor cuando Jarvis invoca una función
+  get tools() {
+    const url = process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api/vapi/jarvis`
+      : null;
+    return FUNCIONES_VAPI.map(f => ({
+      type: 'function',
+      function: {
+        name:        f.name,
+        description: f.description,
+        parameters:  f.parameters,
+      },
+      ...(url ? { server: { url } } : {}),
+    }));
   },
   voice: {
     provider:        '11labs',

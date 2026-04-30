@@ -2,45 +2,97 @@
 // JARVIS VOICE — Handler de funciones en tiempo real
 // VAPI llama a este endpoint cuando Jarvis invoca
 // una función durante la llamada de voz
+//
+// Soporta dos formatos de VAPI:
+//   tool-calls  → tools[] con server.url (formato actual)
+//   function-call → model.functions legacy (compatibilidad)
 // ════════════════════════════════════════════════════
 
 import { TOOL_HANDLERS } from './tools.js';
 
-// VAPI envía: { message: { type: 'function-call', functionCall: { name, parameters } } }
 export async function manejarFuncionVoz(body) {
   const msg = body?.message;
-  if (msg?.type !== 'function-call') return null;
+  if (!msg) return null;
 
-  const { name, parameters } = msg.functionCall || {};
-  if (!name) return null;
+  // ── Formato actual: tools con server.url ──────────
+  // VAPI envía: { message: { type: 'tool-calls', toolCallList: [{ id, function: { name, arguments } }] } }
+  if (msg.type === 'tool-calls') {
+    const list = msg.toolCallList || [];
+    if (!list.length) return null;
 
-  // VAPI puede mandar parameters como string JSON o como objeto
-  let params = {};
-  try {
-    params = typeof parameters === 'string' ? JSON.parse(parameters) : (parameters || {});
-  } catch {
-    params = {};
-  }
+    const results = [];
 
-  console.log(`[Jarvis Voice] Ejecutando: ${name}`, JSON.stringify(params));
+    for (const toolCall of list) {
+      const name = toolCall.function?.name;
+      const id   = toolCall.id;
+      if (!name) continue;
 
-  try {
-    const handler = TOOL_HANDLERS[name];
-    if (!handler) {
-      console.warn(`[Jarvis Voice] Handler no encontrado: ${name}`);
-      return { result: `No tengo esa función disponible en este momento. Dímelo por Telegram.` };
+      let params = {};
+      try {
+        const args = toolCall.function?.arguments;
+        params = typeof args === 'string' ? JSON.parse(args) : (args || {});
+      } catch {
+        params = {};
+      }
+
+      console.log(`[Jarvis Voice] Ejecutando: ${name}`, JSON.stringify(params));
+
+      let result;
+      try {
+        const handler = TOOL_HANDLERS[name];
+        if (!handler) {
+          console.warn(`[Jarvis Voice] Handler no encontrado: ${name}`);
+          result = `No tengo esa función disponible. Dímelo por Telegram.`;
+        } else {
+          const raw = await handler(params);
+          result = limpiarParaVoz(String(raw));
+          console.log(`[Jarvis Voice] Resultado de ${name}:`, result.slice(0, 200));
+        }
+      } catch (err) {
+        console.error(`[Jarvis Voice] Error en ${name}:`, err.message);
+        result = `Hubo un error ejecutando eso. ${err.message}.`;
+      }
+
+      results.push({ toolCallId: id, result });
     }
 
-    const resultado = await handler(params);
-    console.log(`[Jarvis Voice] Resultado de ${name}:`, String(resultado).slice(0, 200));
-
-    const textoVoz = limpiarParaVoz(String(resultado));
-    return { result: textoVoz };
-
-  } catch (err) {
-    console.error(`[Jarvis Voice] Error en ${name}:`, err.message);
-    return { result: `Hubo un error ejecutando eso. ${err.message}. Intenta por Telegram.` };
+    // VAPI espera: { results: [{ toolCallId, result }] }
+    return { results };
   }
+
+  // ── Formato legacy: model.functions ───────────────
+  // VAPI envía: { message: { type: 'function-call', functionCall: { name, parameters } } }
+  if (msg.type === 'function-call') {
+    const { name, parameters } = msg.functionCall || {};
+    if (!name) return null;
+
+    let params = {};
+    try {
+      params = typeof parameters === 'string' ? JSON.parse(parameters) : (parameters || {});
+    } catch {
+      params = {};
+    }
+
+    console.log(`[Jarvis Voice] Ejecutando: ${name}`, JSON.stringify(params));
+
+    try {
+      const handler = TOOL_HANDLERS[name];
+      if (!handler) {
+        console.warn(`[Jarvis Voice] Handler no encontrado: ${name}`);
+        return { result: `No tengo esa función disponible. Dímelo por Telegram.` };
+      }
+
+      const resultado = await handler(params);
+      console.log(`[Jarvis Voice] Resultado de ${name}:`, String(resultado).slice(0, 200));
+      return { result: limpiarParaVoz(String(resultado)) };
+
+    } catch (err) {
+      console.error(`[Jarvis Voice] Error en ${name}:`, err.message);
+      return { result: `Hubo un error ejecutando eso. ${err.message}. Intenta por Telegram.` };
+    }
+  }
+
+  return null;
 }
 
 // Limpiar texto HTML/Markdown/emojis para que suene bien en voz
