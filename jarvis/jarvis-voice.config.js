@@ -304,6 +304,35 @@ const FUNCIONES_VAPI = [
     },
   },
 
+  // ── SMS ──────────────────────────────────────────────
+  {
+    name:        'enviar_sms',
+    description: 'Envía un SMS de texto a un número de teléfono.',
+    parameters: {
+      type: 'object',
+      properties: {
+        telefono: { type: 'string', description: 'Número de teléfono del destinatario' },
+        mensaje:  { type: 'string', description: 'Texto del SMS. Máximo 160 caracteres.' },
+        nombre:   { type: 'string', description: 'Nombre del destinatario (opcional)' },
+      },
+      required: ['telefono', 'mensaje'],
+    },
+  },
+
+  {
+    name:        'enviar_sms_masivo',
+    description: 'Envía SMS masivo a todos los contactos de un nicho del CRM. Usa {nombre} en el mensaje para personalizar.',
+    parameters: {
+      type: 'object',
+      properties: {
+        nicho:   { type: 'string', description: 'Nicho del CRM: lease-renewal, autos, marketing, digital, general' },
+        mensaje: { type: 'string', description: 'Texto del SMS. Usa {nombre} para personalizar. Máximo 160 chars.' },
+        limite:  { type: 'number', description: 'Máximo de SMS. Default: todos.' },
+      },
+      required: ['nicho', 'mensaje'],
+    },
+  },
+
   // ── PRODUCTOS DIGITALES ──────────────────────────────
   {
     name:        'ver_experimentos',

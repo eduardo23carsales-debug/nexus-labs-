@@ -73,6 +73,7 @@ export const ENV = {
   TWILIO_ACCOUNT_SID:     optional('TWILIO_ACCOUNT_SID'),
   TWILIO_AUTH_TOKEN:      optional('TWILIO_AUTH_TOKEN'),
   TWILIO_WHATSAPP_FROM:   optional('TWILIO_WHATSAPP_FROM'),
+  TWILIO_SMS_FROM:        optional('TWILIO_SMS_FROM'),
 
   // Seguridad
   DASHBOARD_SECRET:       optional('DASHBOARD_SECRET', 'changeme'),

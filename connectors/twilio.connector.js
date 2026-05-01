@@ -13,13 +13,40 @@ import ENV   from '../config/env.js';
 const TWILIO_SID   = process.env.TWILIO_ACCOUNT_SID?.trim();
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN?.trim();
 const TWILIO_WA    = process.env.TWILIO_WHATSAPP_FROM?.trim(); // formato: whatsapp:+14155238886
+const TWILIO_SMS   = process.env.TWILIO_SMS_FROM?.trim();      // formato: +17865551234
 
-const configurado = () => TWILIO_SID && TWILIO_TOKEN && TWILIO_WA;
+const configurado    = () => TWILIO_SID && TWILIO_TOKEN && TWILIO_WA;
+const smsConfigurado = () => TWILIO_SID && TWILIO_TOKEN && TWILIO_SMS;
 
 export const TwilioConnector = {
 
   disponible() {
     return !!configurado();
+  },
+
+  smsDisponible() {
+    return !!smsConfigurado();
+  },
+
+  async enviarSMS(para, mensaje) {
+    if (!smsConfigurado()) return { ok: false, error: 'TWILIO_SMS_FROM no configurado en Railway' };
+
+    let tel = para.replace(/\D/g, '');
+    if (tel.length === 10) tel = `1${tel}`;
+    if (!tel.startsWith('+')) tel = `+${tel}`;
+
+    try {
+      const { data } = await axios.post(
+        `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`,
+        new URLSearchParams({ From: TWILIO_SMS, To: tel, Body: mensaje }),
+        { auth: { username: TWILIO_SID, password: TWILIO_TOKEN }, timeout: 10000 }
+      );
+      return { ok: true, sid: data.sid, telefono: tel };
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message;
+      console.error('[Twilio SMS] Error:', msg);
+      return { ok: false, error: msg };
+    }
   },
 
   async enviarWhatsApp(para, mensaje) {

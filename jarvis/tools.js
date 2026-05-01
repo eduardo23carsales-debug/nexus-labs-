@@ -32,6 +32,7 @@ import { evaluarNicho }                         from '../scaling_agent/index.js'
 import { validarIdea, verificarResultado }      from '../validation_agent/index.js';
 import ENV                                      from '../config/env.js';
 import { ProjectsDB }                           from '../crm/projects.db.js';
+import { TwilioConnector }                      from '../connectors/twilio.connector.js';
 
 // ── Definiciones de tools para Claude ─────────────────
 export const TOOL_DEFINITIONS = [
@@ -473,6 +474,45 @@ Si el cliente no está en el CRM, redacta según el objetivo que le indiques.
         asunto:        { type: 'string', description: 'Asunto del email. Si no se indica, Jarvis lo genera según el objetivo.' },
       },
       required: ['para', 'objetivo'],
+    },
+  },
+
+  // ── SMS ───────────────────────────────────────────
+  {
+    name: 'enviar_sms',
+    description: `Envía un SMS de texto a un número de teléfono específico.
+Úsalo cuando Eduardo diga:
+- "manda un SMS a Roberto al 786xxx diciéndole X"
+- "mándale un texto a [nombre] que su cita es mañana"
+- "envía un mensaje de texto a [número] sobre X"
+El mensaje queda registrado en el historial del cliente en el CRM si existe.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        telefono: { type: 'string', description: 'Número de teléfono del destinatario' },
+        mensaje:  { type: 'string', description: 'Texto del SMS. Máximo 160 caracteres.' },
+        nombre:   { type: 'string', description: 'Nombre del destinatario (opcional, para registrar en CRM)' },
+      },
+      required: ['telefono', 'mensaje'],
+    },
+  },
+
+  {
+    name: 'enviar_sms_masivo',
+    description: `Envía SMS masivo a los contactos del CRM de un nicho específico.
+Personaliza el mensaje con el nombre de cada contacto automáticamente.
+Úsalo cuando Eduardo diga:
+- "manda SMS a todos los del CRM de automotriz diciéndoles X"
+- "envía texto a los clientes de lease-renewal sobre Y"
+- "SMS masivo a los contactos de marketing"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nicho:    { type: 'string', description: 'Nicho del CRM: lease-renewal, autos, marketing, digital, general, etc.' },
+        mensaje:  { type: 'string', description: 'Template del mensaje. Usa {nombre} para personalizar. Máximo 160 chars.' },
+        limite:   { type: 'number', description: 'Máximo de SMS a enviar. Útil para pruebas. Default: todos.' },
+      },
+      required: ['nicho', 'mensaje'],
     },
   },
 
@@ -1452,6 +1492,66 @@ export const TOOL_HANDLERS = {
     ).catch(() => {});
 
     return `Email enviado a ${nombre || para} (${para}). Asunto: "${asuntoFinal}".`;
+  },
+
+  async enviar_sms({ telefono, mensaje, nombre }) {
+    if (!TwilioConnector.smsDisponible()) {
+      return '⚠️ SMS no configurado. Agrega TWILIO_SMS_FROM en Railway con tu número Twilio habilitado para SMS.';
+    }
+    const res = await TwilioConnector.enviarSMS(telefono, mensaje);
+    if (!res.ok) return `Error enviando SMS a ${nombre || telefono}: ${res.error}`;
+
+    // Registrar en historial del cliente si existe
+    try {
+      const cliente = await ClientDB.obtener(telefono);
+      if (cliente) {
+        await ClientDB.registrarInteraccion(telefono, {
+          tipo:      'sms',
+          resultado: 'Enviado',
+          notas:     mensaje.slice(0, 100),
+        });
+      }
+    } catch {}
+
+    await TelegramConnector.notificar(
+      `💬 <b>SMS enviado</b>\n📱 ${nombre || telefono}\n📝 ${esc(mensaje.slice(0, 80))}${mensaje.length > 80 ? '…' : ''}`
+    ).catch(() => {});
+
+    return `SMS enviado a ${nombre || telefono} (${telefono}). Mensaje: "${mensaje.slice(0, 80)}${mensaje.length > 80 ? '…' : ''}".`;
+  },
+
+  async enviar_sms_masivo({ nicho, mensaje, limite }) {
+    if (!TwilioConnector.smsDisponible()) {
+      return '⚠️ SMS no configurado. Agrega TWILIO_SMS_FROM en Railway con tu número Twilio habilitado para SMS.';
+    }
+    const contactos = await ClientDB.listar({ nicho, limit: limite || 200 });
+    if (!contactos.length) return `No hay contactos en el CRM con nicho "${nicho}".`;
+
+    const conTelefono = contactos.filter(c => c.telefono);
+    if (!conTelefono.length) return `Los contactos de "${nicho}" no tienen teléfono registrado.`;
+
+    let enviados = 0, fallidos = 0;
+    for (const c of conTelefono) {
+      const texto = mensaje.replace(/\{nombre\}/gi, c.nombre || 'amigo');
+      const res = await TwilioConnector.enviarSMS(c.telefono, texto);
+      if (res.ok) {
+        enviados++;
+        try {
+          await ClientDB.registrarInteraccion(c.telefono, {
+            tipo: 'sms', resultado: 'Enviado', notas: texto.slice(0, 100),
+          });
+        } catch {}
+      } else {
+        fallidos++;
+      }
+      await new Promise(r => setTimeout(r, 1200)); // 1.2s entre SMS
+    }
+
+    await TelegramConnector.notificar(
+      `💬 <b>SMS masivo completado</b>\n📊 Nicho: ${nicho}\n✅ Enviados: ${enviados} | ❌ Fallidos: ${fallidos}`
+    ).catch(() => {});
+
+    return `SMS masivo a "${nicho}": ${enviados} enviados, ${fallidos} fallidos de ${conTelefono.length} contactos.`;
   },
 
   async rechazar_nicho({ nicho_json }) {
