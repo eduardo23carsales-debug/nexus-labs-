@@ -1495,8 +1495,13 @@ export const TOOL_HANDLERS = {
   },
 
   async enviar_sms({ telefono, mensaje, nombre }) {
-    if (!TwilioConnector.smsDisponible()) {
-      return '⚠️ SMS no configurado. Agrega TWILIO_SMS_FROM en Railway con tu número Twilio habilitado para SMS.';
+    // Diagnóstico exacto: leer process.env en tiempo real para ver qué falta
+    const faltantes = [];
+    if (!process.env.TWILIO_ACCOUNT_SID) faltantes.push('TWILIO_ACCOUNT_SID');
+    if (!process.env.TWILIO_AUTH_TOKEN)  faltantes.push('TWILIO_AUTH_TOKEN');
+    if (!process.env.TWILIO_SMS_FROM)    faltantes.push('TWILIO_SMS_FROM');
+    if (faltantes.length) {
+      return `⚠️ SMS no funcionará. Faltan estas variables en Railway: ${faltantes.join(', ')}`;
     }
     const res = await TwilioConnector.enviarSMS(telefono, mensaje);
     if (!res.ok) return `Error enviando SMS a ${nombre || telefono}: ${res.error}`;
@@ -1521,8 +1526,12 @@ export const TOOL_HANDLERS = {
   },
 
   async enviar_sms_masivo({ nicho, mensaje, limite }) {
-    if (!TwilioConnector.smsDisponible()) {
-      return '⚠️ SMS no configurado. Agrega TWILIO_SMS_FROM en Railway con tu número Twilio habilitado para SMS.';
+    const faltantes = [];
+    if (!process.env.TWILIO_ACCOUNT_SID) faltantes.push('TWILIO_ACCOUNT_SID');
+    if (!process.env.TWILIO_AUTH_TOKEN)  faltantes.push('TWILIO_AUTH_TOKEN');
+    if (!process.env.TWILIO_SMS_FROM)    faltantes.push('TWILIO_SMS_FROM');
+    if (faltantes.length) {
+      return `⚠️ SMS no funcionará. Faltan estas variables en Railway: ${faltantes.join(', ')}`;
     }
     const contactos = await ClientDB.listar({ nicho, limit: limite || 200 });
     if (!contactos.length) return `No hay contactos en el CRM con nicho "${nicho}".`;

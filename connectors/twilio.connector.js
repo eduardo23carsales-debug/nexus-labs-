@@ -29,7 +29,14 @@ export const TwilioConnector = {
   },
 
   async enviarSMS(para, mensaje) {
-    if (!smsConfigurado()) return { ok: false, error: 'TWILIO_SMS_FROM no configurado en Railway' };
+    // Leer en tiempo real para no depender de los consts del módulo
+    const sid   = process.env.TWILIO_ACCOUNT_SID?.trim();
+    const token = process.env.TWILIO_AUTH_TOKEN?.trim();
+    const from  = process.env.TWILIO_SMS_FROM?.trim();
+
+    if (!sid || !token || !from) {
+      return { ok: false, error: 'Credenciales Twilio incompletas' };
+    }
 
     let tel = para.replace(/\D/g, '');
     if (tel.length === 10) tel = `1${tel}`;
@@ -37,9 +44,9 @@ export const TwilioConnector = {
 
     try {
       const { data } = await axios.post(
-        `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`,
-        new URLSearchParams({ From: TWILIO_SMS, To: tel, Body: mensaje }),
-        { auth: { username: TWILIO_SID, password: TWILIO_TOKEN }, timeout: 10000 }
+        `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+        new URLSearchParams({ From: from, To: tel, Body: mensaje }),
+        { auth: { username: sid, password: token }, timeout: 10000 }
       );
       return { ok: true, sid: data.sid, telefono: tel };
     } catch (err) {
