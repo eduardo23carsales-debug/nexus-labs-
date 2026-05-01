@@ -124,7 +124,6 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
     objective:                         'OUTCOME_LEADS',
     status:                            'ACTIVE',
     special_ad_categories:             [],
-    is_adset_budget_sharing_enabled:   false,
   });
 
   // 2. Asset (imagen override > video > foto > DALL-E)
