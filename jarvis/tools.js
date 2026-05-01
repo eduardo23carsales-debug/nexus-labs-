@@ -778,6 +778,7 @@ export const TOOL_HANDLERS = {
       `Leads totales: ${conv.total_leads} | Cierres: ${conv.cierres}`,
       `CRM: ${crmTotal} clientes | ${seguim} seguimientos vencidos`,
       rev.ventas > 0 ? `Revenue: $${rev.revenue}` : '',
+      `Twilio SMS: ${process.env.TWILIO_ACCOUNT_SID ? '✅' : '❌ TWILIO_ACCOUNT_SID'} | ${process.env.TWILIO_AUTH_TOKEN ? '✅' : '❌ TWILIO_AUTH_TOKEN'} | ${process.env.TWILIO_SMS_FROM ? `✅ ${process.env.TWILIO_SMS_FROM}` : '❌ TWILIO_SMS_FROM'}`,
     ].filter(Boolean).join('\n');
   },
 
