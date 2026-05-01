@@ -333,6 +333,21 @@ const FUNCIONES_VAPI = [
     },
   },
 
+  // ── LLAMADA SIMPLE ───────────────────────────────────
+  {
+    name:        'llamar_simple',
+    description: 'Llama a un número con Sofia sin contexto CRM — para llamadas rápidas a números nuevos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        telefono: { type: 'string' },
+        nombre:   { type: 'string' },
+        segmento: { type: 'string', description: 'emprendedor-principiante, emprendedor-escalar, afiliado-hotmart, infoproductor, oferta-especial' },
+      },
+      required: ['telefono', 'nombre'],
+    },
+  },
+
   // ── PRODUCTOS DIGITALES ──────────────────────────────
   {
     name:        'ver_experimentos',
@@ -342,6 +357,134 @@ const FUNCIONES_VAPI = [
       properties: {
         estado: { type: 'string', description: 'activo, escalado, muerto. Default: activo' },
       },
+    },
+  },
+
+  {
+    name:        'ver_resultado_experimento',
+    description: 'Detalle completo de un experimento: ventas, revenue, conversión, leads generados.',
+    parameters: {
+      type: 'object',
+      properties: {
+        buscar: { type: 'string', description: 'Nombre o ID del experimento' },
+      },
+      required: ['buscar'],
+    },
+  },
+
+  {
+    name:        'iniciar_experimento',
+    description: 'Crea un nuevo experimento de producto digital para validar en el mercado.',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre:   { type: 'string', description: 'Nombre del producto o experimento' },
+        nicho:    { type: 'string', description: 'Nicho objetivo' },
+        precio:   { type: 'number', description: 'Precio de venta en dólares' },
+        objetivo: { type: 'string', description: 'Qué validar con este experimento' },
+      },
+      required: ['nombre', 'nicho', 'precio'],
+    },
+  },
+
+  {
+    name:        'generar_producto',
+    description: 'Genera un producto digital completo con IA: módulos, contenido, precio. Tarda varios minutos — Jarvis notifica por Telegram cuando termina.',
+    parameters: {
+      type: 'object',
+      properties: {
+        nicho_json: { type: 'string', description: 'JSON del nicho (obtenido de investigar_nicho)' },
+      },
+      required: ['nicho_json'],
+    },
+  },
+
+  {
+    name:        'generar_contenido_producto',
+    description: 'Genera el contenido completo de un producto digital existente (módulos, lecciones, PDFs).',
+    parameters: {
+      type: 'object',
+      properties: {
+        experimento_id: { type: 'number', description: 'ID del experimento' },
+      },
+      required: ['experimento_id'],
+    },
+  },
+
+  {
+    name:        'publicar_con_stripe',
+    description: 'Publica un producto digital con página de ventas y link de pago de Stripe.',
+    parameters: {
+      type: 'object',
+      properties: {
+        experimento_id: { type: 'number', description: 'ID del experimento a publicar' },
+      },
+      required: ['experimento_id'],
+    },
+  },
+
+  {
+    name:        'publicar_hotmart',
+    description: 'Publica un producto en Hotmart para venta como infoproducto.',
+    parameters: {
+      type: 'object',
+      properties: {
+        experimento_id: { type: 'number', description: 'ID del experimento a publicar en Hotmart' },
+      },
+      required: ['experimento_id'],
+    },
+  },
+
+  // ── CAMPAÑAS DE TRÁFICO ───────────────────────────────
+  {
+    name:        'lanzar_campana_producto',
+    description: 'Crea una campaña de tráfico en Meta Ads apuntando a la landing page de un producto.',
+    parameters: {
+      type: 'object',
+      properties: {
+        segmento:    { type: 'string', description: 'Segmento de audiencia' },
+        url_destino: { type: 'string', description: 'URL de la landing page del producto' },
+        presupuesto: { type: 'number', description: 'Presupuesto diario en dólares' },
+      },
+      required: ['segmento', 'url_destino', 'presupuesto'],
+    },
+  },
+
+  // ── INVESTIGACIÓN ─────────────────────────────────────
+  {
+    name:        'investigar_nicho',
+    description: 'Investiga un nicho de mercado con IA para encontrar productos rentables. Tarda varios minutos — notifica por Telegram al terminar.',
+    parameters: {
+      type: 'object',
+      properties: {
+        descripcion: { type: 'string', description: 'Describe el nicho o idea a investigar' },
+      },
+      required: ['descripcion'],
+    },
+  },
+
+  {
+    name:        'pipeline_completo',
+    description: 'Ejecuta el pipeline completo: investiga nicho → genera producto → crea landing → lanza campaña. Proceso largo, notifica por Telegram en cada paso.',
+    parameters: {
+      type: 'object',
+      properties: {
+        descripcion: { type: 'string', description: 'Describe el nicho o idea de producto' },
+        presupuesto: { type: 'number', description: 'Presupuesto diario en Meta Ads en dólares' },
+      },
+      required: ['descripcion'],
+    },
+  },
+
+  {
+    name:        'rechazar_nicho',
+    description: 'Marca un nicho como rechazado para que el sistema lo evite en el futuro.',
+    parameters: {
+      type: 'object',
+      properties: {
+        nicho_json: { type: 'string', description: 'Nombre o descripción del nicho a rechazar' },
+      },
+      required: ['nicho_json'],
     },
   },
 ];
