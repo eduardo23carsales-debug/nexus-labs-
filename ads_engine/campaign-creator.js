@@ -118,12 +118,13 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
   const ts     = Date.now();
   const nombre = `Nexus Labs —${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
 
-  // 1. Campaña
+  // 1. Campaña — presupuesto a nivel campaña (CBO requerido por Meta API v25 para OUTCOME_LEADS)
   const campana = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/campaigns`, {
-    name:                              nombre,
-    objective:                         'OUTCOME_LEADS',
-    status:                            'ACTIVE',
-    special_ad_categories:             [],
+    name:                  nombre,
+    objective:             'OUTCOME_LEADS',
+    status:                'ACTIVE',
+    special_ad_categories: [],
+    daily_budget:          Math.round(presupuestoDia * 100),
   });
 
   // 2. Asset (imagen override > video > foto > DALL-E)
@@ -154,12 +155,11 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
     try {
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
 
-      // AdSet — promoted_object requerido para Lead Ads en API v25
+      // AdSet — sin daily_budget (CBO maneja el presupuesto desde la campaña)
       const adset = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/adsets`, {
         name:              adsetNombre,
         campaign_id:       campana.id,
         status:            'ACTIVE',
-        daily_budget:      Math.round(presupuestoDia / seg.copies.length * 100),
         billing_event:     'IMPRESSIONS',
         targeting:         TARGETING_DIGITAL,
         optimization_goal: 'LEAD_GENERATION',
@@ -219,12 +219,13 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia)
   const ts     = Date.now();
   const nombre = `Nexus Labs — ${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
 
-  // 1. Campaña de tráfico
+  // 1. Campaña de tráfico — presupuesto a nivel campaña (CBO)
   const campana = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/campaigns`, {
     name:                  nombre,
     objective:             'OUTCOME_TRAFFIC',
     status:                'ACTIVE',
     special_ad_categories: [],
+    daily_budget:          Math.round(presupuestoDia * 100),
   });
 
   // 2. Asset (video > foto > DALL-E)
@@ -253,7 +254,6 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia)
         name:             adsetNombre,
         campaign_id:      campana.id,
         status:           'ACTIVE',
-        daily_budget:     Math.round(presupuestoDia / seg.copies.length * 100),
         billing_event:    'IMPRESSIONS',
         targeting:        TARGETING_DIGITAL,
         optimization_goal: 'LANDING_PAGE_VIEWS',
