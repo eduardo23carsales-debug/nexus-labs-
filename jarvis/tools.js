@@ -7,7 +7,7 @@ import { llamarConContexto }                    from '../call_agent/context-call
 import { procesarLead }                         from '../lead_system/capture.js';
 import { ejecutarAnalista }                     from '../agents/analista/index.js';
 import { ejecutarSupervisor }                   from '../agents/supervisor/index.js';
-import { crearCampana, crearCampañaTrafico, generarYSubirImagen } from '../ads_engine/campaign-creator.js';
+import { crearCampana, crearCampañaTrafico, generarYSubirImagen, generarCopiesParaProducto } from '../ads_engine/campaign-creator.js';
 import { CampaignManager }                      from '../ads_engine/campaign-manager.js';
 import { MetaConnector }                        from '../connectors/meta.connector.js';
 import { TelegramConnector, esc }               from '../connectors/telegram.connector.js';
@@ -1081,39 +1081,54 @@ export const TOOL_HANDLERS = {
       return `No encontré un producto con "${nombre_o_id}". Usa ver_experimentos para ver los disponibles.`;
     }
 
-    await notif(`🔄 <b>Relanzando "${esc(exp.nombre)}"</b> (experimento #${exp.id})\n\nPaso 1/2 — Lanzando campaña Meta Ads...`);
+    await notif(`🔄 <b>Relanzando "${esc(exp.nombre)}"</b> (experimento #${exp.id})\n\nPaso 1/3 — Generando copies específicos del producto...`);
+
+    // Paso 1: Copies específicos del producto
+    let copies = null;
+    try {
+      copies = await generarCopiesParaProducto(exp.nombre, exp.nicho || exp.nombre, exp.precio || 27);
+    } catch (err) {
+      console.warn('[Relanzar] Copies fallaron, usando segmento genérico:', err.message);
+    }
+
+    const nichoBasico = {
+      nombre_producto:       exp.nombre,
+      nicho:                 exp.nicho || exp.nombre,
+      tipo:                  exp.tipo || 'guia_pdf',
+      precio:                exp.precio || 27,
+      problema_que_resuelve: exp.nombre,
+      subtitulo:             '',
+      cliente_ideal:         'Emprendedor hispano en USA',
+      quick_win:             'Resultados desde el primer día',
+      puntos_de_venta:       [],
+    };
+
+    // Paso 2: Stripe primero (para que la campaña apunte al link de compra)
+    let stripeInfo = null;
+    if (StripeConnector.disponible()) {
+      await notif(`✅ Copies listos\n\nPaso 2/3 — Publicando landing page con Stripe...`);
+      try {
+        stripeInfo = await publicarConStripe(nichoBasico, null, exp.id);
+      } catch (err) {
+        console.warn('[Relanzar] Stripe falló:', err.message);
+      }
+    }
+
+    // Paso 3: Campaña Meta — tráfico directo a Stripe si existe, sino leads
+    await notif(`${stripeInfo ? '✅ Landing lista' : '⚠️ Sin Stripe'}\n\nPaso 3/3 — Lanzando campaña Meta Ads...`);
 
     let campaña;
     try {
-      campaña = await crearCampana(segmento, presupuesto, {});
+      if (stripeInfo?.landing_url) {
+        campaña = await crearCampañaTrafico(segmento, stripeInfo.landing_url, presupuesto, { copies });
+      } else {
+        campaña = await crearCampana(segmento, presupuesto, { copies });
+      }
     } catch (err) {
-      return `❌ Meta Ads falló: ${err.message}\nEl producto #${exp.id} sigue guardado — intenta de nuevo cuando el token esté listo.`;
+      return `❌ Meta Ads falló: ${err.message}\nProducto #${exp.id} guardado — intenta de nuevo cuando el token esté listo.`;
     }
 
-    if (!StripeConnector.disponible()) {
-      return `✅ Campaña Meta Ads activa — "${campaña.nombre}"\n⚠️ Stripe no configurado — agrega STRIPE_SECRET_KEY para generar la landing page.`;
-    }
-
-    await notif(`✅ Campaña Meta Ads creada\n\nPaso 2/2 — Publicando landing page con Stripe...`);
-
-    const nichoBasico = {
-      nombre_producto:      exp.nombre,
-      nicho:                exp.nicho || exp.nombre,
-      tipo:                 exp.tipo || 'guia_pdf',
-      precio:               exp.precio || 27,
-      problema_que_resuelve: exp.nombre,
-      subtitulo:            '',
-      cliente_ideal:        'Emprendedor hispano en USA',
-      quick_win:            'Resultados desde el primer día',
-      puntos_de_venta:      [],
-    };
-
-    try {
-      const stripeInfo = await publicarConStripe(nichoBasico, null, exp.id);
-      return `✅ Relanzado exitosamente:\n📦 ${exp.nombre}\n🌐 Landing: ${stripeInfo.landing_url}\n💳 Stripe: ${stripeInfo.stripe_payment_link}\n📊 Campaña: ${campaña.nombre}`;
-    } catch (err) {
-      return `✅ Campaña Meta Ads activa. Stripe falló: ${err.message}`;
-    }
+    return `✅ Relanzado exitosamente:\n📦 ${exp.nombre}\n${stripeInfo ? `🌐 Landing: ${stripeInfo.landing_url}\n💳 Stripe: ${stripeInfo.stripe_payment_link}\n` : ''}📊 Campaña: ${campaña.nombre} (${stripeInfo ? 'tráfico directo' : 'formulario leads'})`;
   },
 
   async pipeline_completo({ presupuesto = 10, segmento = 'emprendedor-principiante', enfoque = null } = {}) {
@@ -1189,33 +1204,63 @@ export const TOOL_HANDLERS = {
       }
 
       checkCancelado();
-      await notif(`✅ <b>Producto generado</b> (${(html.length / 1024).toFixed(0)} KB)\n\nPaso 3/4 — Creando imagen de portada con IA...`);
+      await notif(`✅ <b>Producto generado</b> (${(html.length / 1024).toFixed(0)} KB)\n\nPaso 3/5 — Creando imagen de portada con IA...`);
 
       // Paso 3: Imagen de portada (no fatal si falla)
       let imagenHash = null;
       try {
         const promptImagen = [
-          `Modern digital marketing ad image for a course about earning money online with AI,`,
-          `Hispanic entrepreneur working on a sleek laptop, phone showing cash app notifications,`,
-          `clean minimal background with subtle blue light glow, professional photo style,`,
-          `NO TEXT, NO WORDS, NO LETTERS anywhere in the image,`,
-          `cinematic lighting, aspirational lifestyle, 4k quality`,
+          `Professional ad image for: ${nicho.nombre_producto}.`,
+          `Hispanic person solving a problem or achieving a goal, realistic photo style,`,
+          `clean minimal background, NO TEXT, NO WORDS, NO LETTERS anywhere in the image,`,
+          `cinematic lighting, 4k quality`,
         ].join(' ');
         const imagen = await generarYSubirImagen(promptImagen);
         imagenHash = imagen.hash;
         await TelegramConnector.notificarFoto(imagen.url, `🖼️ <b>Portada generada para "${nicho.nombre_producto}"</b>`).catch(() => {});
-        await notif(`✅ <b>Imagen de portada creada</b>\n\nPaso 4/4 — Lanzando campaña en Meta Ads con $${presupuesto}/día...`);
       } catch (err) {
-        await notif(`⚠️ Imagen falló (${err.message}), usando imagen genérica del segmento.\n\nPaso 4/4 — Lanzando campaña...`);
+        console.warn('[Pipeline] Imagen falló:', err.message);
       }
 
       checkCancelado();
-      // Paso 4: Crear campaña en Meta Ads
+
+      // Paso 4: Stripe primero — la campaña apunta al link de compra
+      let stripeInfo = null;
+      if (StripeConnector.disponible()) {
+        await notif(`${imagenHash ? '✅ Imagen creada' : '⚠️ Sin imagen'}\n\nPaso 4/5 — Publicando landing page con Stripe...`);
+        try {
+          stripeInfo = await publicarConStripe(nicho, html, exp?.id);
+          if (projectId && stripeInfo?.landing_url) {
+            await ProjectsDB.registrarAccionAgente(projectId, 'stripe', 'landing_publicada', stripeInfo.landing_url).catch(() => {});
+          }
+        } catch (err) {
+          await notif(`⚠️ Stripe falló: ${err.message}\nContinuando con formulario de leads...`);
+        }
+      } else {
+        await notif(`${imagenHash ? '✅ Imagen creada' : '⚠️ Sin imagen'}\n\nPaso 4/5 — (Stripe no configurado, saltando...)`);
+      }
+
+      // Paso 4b: Copies específicos del producto
+      let copies = null;
+      try {
+        copies = await generarCopiesParaProducto(nicho.nombre_producto, nicho.nicho, nicho.precio);
+      } catch (err) {
+        console.warn('[Pipeline] Copies fallaron, usando segmento genérico:', err.message);
+      }
+
+      checkCancelado();
+      // Paso 5: Campaña Meta — tráfico directo a Stripe si existe, sino formulario de leads
+      await notif(`${stripeInfo ? '✅ Landing lista' : '⚠️ Sin Stripe'}\n\nPaso 5/5 — Lanzando campaña Meta Ads ($${presupuesto}/día)...`);
+
       let campaña;
       try {
-        campaña = await crearCampana(segmento, presupuesto, { imagenHash });
+        if (stripeInfo?.landing_url) {
+          campaña = await crearCampañaTrafico(segmento, stripeInfo.landing_url, presupuesto, { copies });
+        } else {
+          campaña = await crearCampana(segmento, presupuesto, { imagenHash, copies, stripeUrl: null });
+        }
       } catch (err) {
-        await notif(`❌ <b>Pipeline falló en Paso 4</b> (crear campaña Meta)\n<code>${esc(err.message)}</code>\n\nProducto ya guardado — puedes relanzar solo la campaña.`);
+        await notif(`❌ <b>Pipeline falló en Paso 5</b> (crear campaña Meta)\n<code>${esc(err.message)}</code>\n\nProducto ya guardado — puedes relanzar solo la campaña.`);
         throw err;
       }
 
@@ -1225,22 +1270,9 @@ export const TOOL_HANDLERS = {
         await ProjectsDB.actualizarMetricas(projectId, { inversion: presupuesto }, 'pipeline').catch(() => {});
       }
 
-      // Paso 5: Publicar con Stripe si está configurado
-      let stripeInfo = null;
-      if (StripeConnector.disponible()) {
-        await notif(`✅ <b>Campaña en Meta Ads activa</b>\n\nPaso 5/5 — Publicando landing page con Stripe...`);
-        try {
-          stripeInfo = await publicarConStripe(nicho, html, exp?.id);
-          if (projectId && stripeInfo?.landing_url) {
-            await ProjectsDB.registrarAccionAgente(projectId, 'stripe', 'landing_publicada', stripeInfo.landing_url).catch(() => {});
-          }
-        } catch (err) {
-          await notif(`⚠️ Stripe falló: ${err.message}\nEl resto del pipeline está OK.`);
-        }
-      }
-
       const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
       const accesoUrl = stripeInfo?.slug ? `${dominio}/acceso/${stripeInfo.slug}` : null;
+      const tipoCampaña = stripeInfo?.landing_url ? 'tráfico directo a página de compra' : 'formulario de leads';
 
       await notif(
         `🚀 <b>Pipeline completo</b>\n` +
@@ -1248,17 +1280,18 @@ export const TOOL_HANDLERS = {
         `📦 Producto: ${nicho.nombre_producto}\n` +
         `💵 Precio: $${nicho.precio} | Score: ${nicho.score}/100\n` +
         `📊 Campaña Meta: ${campaña.nombre}\n` +
+        `🎯 Tipo: ${tipoCampaña}\n` +
         `💰 Presupuesto: $${presupuesto}/día\n` +
-        `🖼️ Imagen: ${imagenHash ? 'portada del producto ✅' : 'genérica del segmento'}\n` +
+        `🖼️ Imagen: ${imagenHash ? 'portada específica ✅' : 'genérica del segmento'}\n` +
         (stripeInfo
           ? `🌐 Landing de ventas: ${stripeInfo.landing_url}\n` +
             `💳 Stripe checkout: ${stripeInfo.stripe_payment_link}\n` +
-            (accesoUrl ? `🎓 <b>Producto (lo que recibe el comprador):</b> ${accesoUrl}\n` : '')
+            (accesoUrl ? `🎓 <b>Producto (comprador recibe):</b> ${accesoUrl}\n` : '')
           : `⚠️ Stripe no configurado — agrega STRIPE_SECRET_KEY\n`) +
         `\nCuando alguien paga → recibe email con el link del producto automáticamente.`
       );
 
-      return `Pipeline completo. Producto: "${nicho.nombre_producto}" | Campaña ID: ${campaña.campaign_id} | Landing: ${stripeInfo?.landing_url || 'sin Stripe'}`;
+      return `Pipeline completo. Producto: "${nicho.nombre_producto}" | Campaña ID: ${campaña.campaign_id} | Tipo: ${tipoCampaña} | Landing: ${stripeInfo?.landing_url || 'sin Stripe'}`;
 
     } catch (err) {
       if (err.message === 'PIPELINE_CANCELADO') {

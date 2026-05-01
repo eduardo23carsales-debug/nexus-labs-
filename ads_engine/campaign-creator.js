@@ -7,9 +7,10 @@ import axios      from 'axios';
 import FormData   from 'form-data';
 import fs         from 'fs';
 import path       from 'path';
-import { MetaConnector }   from '../connectors/meta.connector.js';
-import { OpenAIConnector } from '../connectors/openai.connector.js';
-import { SEGMENTOS }       from './segments.config.js';
+import { MetaConnector }      from '../connectors/meta.connector.js';
+import { OpenAIConnector }    from '../connectors/openai.connector.js';
+import { AnthropicConnector } from '../connectors/anthropic.connector.js';
+import { SEGMENTOS }          from './segments.config.js';
 import ENV from '../config/env.js';
 
 // Targeting base para productos digitales: EEUU hispanohablante
@@ -73,8 +74,25 @@ export async function generarYSubirImagen(prompt) {
   return { hash, url };
 }
 
+// ── Generar copies específicos del producto con Claude ──
+export async function generarCopiesParaProducto(nombreProducto, nicho, precio = 37) {
+  return AnthropicConnector.completarJSONConReintentos({
+    model:     'claude-haiku-4-5-20251001',
+    maxTokens: 600,
+    prompt: `Genera 3 copies de anuncios Meta Ads en español para hispanos en USA.
+
+Producto: "${nombreProducto}"
+Nicho: ${nicho}
+Precio: $${precio}
+
+Cada copy debe tener: tipo (emocional/directo/urgencia), titulo (máx 40 chars), cuerpo (máx 125 chars), cta (máx 20 chars).
+Habla del PROBLEMA EXACTO del nicho. No menciones "ganar dinero" a menos que el nicho sea sobre eso.
+Responde SOLO con un JSON array de 3 objetos, sin texto adicional.`,
+  });
+}
+
 // ── Crear formulario nativo de Lead Ads ─────────────
-async function crearFormulario(segmento) {
+async function crearFormulario(segmento, stripeUrl = null) {
   const seg = SEGMENTOS[segmento];
   const nombre = `Nexus Labs —${seg.nombre} — ${Date.now()}`;
 
@@ -82,7 +100,7 @@ async function crearFormulario(segmento) {
   const data = await MetaConnector.post(`/${ENV.META_PAGE_ID}/leadgen_forms`, {
     name:                  nombre,
     privacy_policy:        { url: `${baseUrl}/privacidad` },
-    follow_up_action_url:  baseUrl,
+    follow_up_action_url:  stripeUrl || baseUrl,
     questions: [
       { type: 'FULL_NAME' },
       { type: 'PHONE'     },
@@ -95,7 +113,7 @@ async function crearFormulario(segmento) {
 
 // ── CREAR CAMPAÑA COMPLETA ────────────────────────────
 // imagenHash opcional: si se pasa, usa esa imagen en vez de buscar/generar una
-export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}) {
+export async function crearCampana(segmento, presupuestoDia, { imagenHash, copies, stripeUrl } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
 
@@ -147,12 +165,13 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
     assetId   = (await generarYSubirImagen(seg.imagenPrompt)).hash;
   }
 
-  // 3. Formulario nativo
-  const formularioId = await crearFormulario(segmento);
+  // 3. Formulario nativo (con redirect a Stripe si está disponible)
+  const formularioId = await crearFormulario(segmento, stripeUrl);
 
-  // 4. AdSets + Creativos + Ads (uno por copy)
+  // 4. AdSets + Creativos + Ads — usa copies específicos del producto si se pasan
+  const copiasEfectivas = (Array.isArray(copies) && copies.length) ? copies : seg.copies;
   const ads = [];
-  for (const copy of seg.copies) {
+  for (const copy of copiasEfectivas) {
     try {
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
 
@@ -211,7 +230,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash } = {}
 }
 
 // ── CAMPAÑA DE TRÁFICO A URL (para Hotmart / landing page) ──
-export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia) {
+export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
   if (!urlDestino) throw new Error('urlDestino es requerido para campañas de tráfico');
@@ -245,9 +264,10 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia)
     assetId   = await generarYSubirImagen(seg.imagenPrompt);
   }
 
-  // 3. AdSets + Creativos + Ads
+  // 3. AdSets + Creativos + Ads — usa copies específicos del producto si se pasan
+  const copiasEfectivas = (Array.isArray(copies) && copies.length) ? copies : seg.copies;
   const ads = [];
-  for (const copy of seg.copies) {
+  for (const copy of copiasEfectivas) {
     try {
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
 
