@@ -85,7 +85,8 @@ export const ClientDB = {
       notas:     interaccion.notas     || '',
       duracion:  interaccion.duracion  || null,
     };
-    const historial = [nueva, ...(rows[0].historial || [])];
+    const prevHistorial = Array.isArray(rows[0].historial) ? rows[0].historial : [];
+    const historial = [nueva, ...prevHistorial];
 
     const updates = [`historial = $1`, `actualizado_en = NOW()`];
     const vals    = [JSON.stringify(historial), tel];
