@@ -68,7 +68,26 @@ export async function arrancar(app) {
     console.log(`[Orchestrator] Token Meta válido — cuenta: ${tokenCheck.nombre}`);
   }
 
-  // 5. Iniciar scheduler (cron jobs)
+  // 5. Registrar suscripción de Meta Lead Ads webhook
+  if (!ENV.META_WEBHOOK_TOKEN) {
+    console.warn('[Orchestrator] META_WEBHOOK_TOKEN no configurado — leads de Meta NO llegarán al sistema');
+  } else if (!ENV.RAILWAY_DOMAIN) {
+    console.warn('[Orchestrator] RAILWAY_PUBLIC_DOMAIN no configurado — webhook Meta no registrado');
+  } else if (!ENV.META_PAGE_ID) {
+    console.warn('[Orchestrator] META_PAGE_ID no configurado — webhook Meta no registrado');
+  } else {
+    try {
+      // Suscribir la página a eventos de leadgen para que Meta envíe los leads al webhook
+      await MetaConnector.post(`/${ENV.META_PAGE_ID}/subscribed_apps`, {
+        subscribed_fields: 'leadgen',
+      });
+      console.log(`[Orchestrator] Meta Lead Ads webhook suscrito ✅ → https://${ENV.RAILWAY_DOMAIN}/api/meta/webhook`);
+    } catch (err) {
+      console.warn(`[Orchestrator] No se pudo suscribir webhook Meta: ${err.message}`);
+    }
+  }
+
+  // 6. Iniciar scheduler (cron jobs)
   iniciarScheduler();
 
   console.log('[Orchestrator] Sistema operativo ✅');
