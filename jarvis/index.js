@@ -17,6 +17,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { TelegramConnector, esc } from '../connectors/telegram.connector.js';
 import { TOOL_DEFINITIONS, TOOL_HANDLERS } from './tools.js';
 import { ConversationDB } from '../memory/conversation.db.js';
+import { JarvisMemoryDB } from '../memory/jarvis.db.js';
 import { SystemState, TOOLS_BLOQUEADAS_SAFE_MODE } from '../config/system-state.js';
 import ENV from '../config/env.js';
 
@@ -138,6 +139,12 @@ export async function procesarMensajeJarvis(texto, chatId) {
     const historial = await ConversationDB.cargar(chatId);
     const messages  = [...historial, { role: 'user', content: texto }];
 
+    // Inyectar memorias persistentes en el system prompt
+    const memorias = await JarvisMemoryDB.getContexto();
+    const systemFinal = memorias
+      ? `${SYSTEM_PROMPT}\n\n═══════════════════════════════════════\nMI MEMORIA PERSISTENTE (lo que sé del negocio)\n═══════════════════════════════════════\n${memorias}`
+      : SYSTEM_PROMPT;
+
     let respuestaFinal = '';
 
     // Loop de tool use — Claude puede encadenar varias herramientas
@@ -145,7 +152,7 @@ export async function procesarMensajeJarvis(texto, chatId) {
       const response = await client.messages.create({
         model:      'claude-sonnet-4-6',
         max_tokens: 2000,
-        system:     SYSTEM_PROMPT,
+        system:     systemFinal,
         tools:      TOOL_DEFINITIONS,
         messages,
       });

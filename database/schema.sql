@@ -123,6 +123,22 @@ CREATE TABLE IF NOT EXISTS conversations (
   ultima_actividad TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+-- ── MEMORIA PERSISTENTE DE JARVIS ───────────────────
+CREATE TABLE IF NOT EXISTS jarvis_memory (
+  id          SERIAL        PRIMARY KEY,
+  tipo        VARCHAR(30)   NOT NULL DEFAULT 'hecho',  -- hecho | preferencia | instruccion | objetivo | aprendizaje | proyecto | cliente | alerta
+  titulo      VARCHAR(255)  NOT NULL,
+  contenido   TEXT          NOT NULL,
+  importancia SMALLINT      NOT NULL DEFAULT 5,         -- 1 (baja) a 10 (crítica)
+  activa      BOOLEAN       NOT NULL DEFAULT TRUE,
+  creado_en   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_jarvis_memory_tipo      ON jarvis_memory(tipo);
+CREATE INDEX IF NOT EXISTS idx_jarvis_memory_activa    ON jarvis_memory(activa);
+CREATE INDEX IF NOT EXISTS idx_jarvis_memory_importancia ON jarvis_memory(importancia DESC);
+
 -- ── MEMORIA DE PRODUCTOS DIGITALES ─────────────────
 CREATE TABLE IF NOT EXISTS product_memory (
   id         SERIAL      PRIMARY KEY,

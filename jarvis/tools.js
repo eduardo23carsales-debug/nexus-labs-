@@ -33,6 +33,7 @@ import { validarIdea, verificarResultado }      from '../validation_agent/index.
 import ENV                                      from '../config/env.js';
 import { ProjectsDB }                           from '../crm/projects.db.js';
 import { TwilioConnector }                      from '../connectors/twilio.connector.js';
+import { JarvisMemoryDB }                       from '../memory/jarvis.db.js';
 
 // ── Definiciones de tools para Claude ─────────────────
 export const TOOL_DEFINITIONS = [
@@ -646,6 +647,42 @@ NO uses pipeline_completo si Eduardo menciona un producto específico que ya exi
         segmento:    { type: 'string', description: 'Segmento Meta Ads. Default: emprendedor-principiante' },
       },
       required: ['nombre_o_id'],
+    },
+  },
+  // ── MEMORIA PERSISTENTE ────────────────────────────
+  {
+    name: 'recordar',
+    description: `Guarda algo importante en la memoria persistente de Jarvis.
+Úsalo cuando Eduardo diga algo que quiere que no olvides, cuando aprendes algo relevante del negocio, o después de completar una acción importante.
+Ejemplos:
+- "recuerda que prefiero campañas de $10/día para probar primero"
+- "guarda que SOS IRS está activo a $10/día"
+- "el contacto de prueba de Eduardo es Jorge Martínez al 786-580-9908"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        titulo:      { type: 'string', description: 'Título corto descriptivo (máx 80 chars)' },
+        contenido:   { type: 'string', description: 'Detalle completo de lo que se recuerda' },
+        tipo:        { type: 'string', enum: ['hecho', 'preferencia', 'instruccion', 'objetivo', 'aprendizaje', 'proyecto', 'cliente', 'alerta'], description: 'Categoría de la memoria' },
+        importancia: { type: 'number', description: 'Del 1 al 10. 10 = crítico, 5 = normal, 1 = trivial' },
+      },
+      required: ['titulo', 'contenido'],
+    },
+  },
+  {
+    name: 'ver_memoria',
+    description: 'Muestra todas las memorias activas de Jarvis. Úsalo cuando Eduardo pregunta qué recuerdas, o antes de tomar decisiones importantes.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'olvidar',
+    description: 'Desactiva una memoria específica por su ID. Úsalo cuando Eduardo dice "olvida eso", "eso ya no aplica" o quiere corregir algo que Jarvis recordó mal.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'ID de la memoria a desactivar (ver con ver_memoria)' },
+      },
+      required: ['id'],
     },
   },
 ];
@@ -1692,6 +1729,26 @@ export const TOOL_HANDLERS = {
       `Datos: $${resultado.datos?.spend || 0} gastados · ${resultado.datos?.leads || 0} leads\n` +
       `Siguiente paso: ${resultado.siguiente_paso}`
     );
+  },
+
+  async recordar({ titulo, contenido, tipo = 'hecho', importancia = 5 }) {
+    const mem = await JarvisMemoryDB.guardar({ tipo, titulo, contenido, importancia });
+    if (!mem) return '⚠️ No se pudo guardar (DATABASE_URL no configurado).';
+    return `🧠 Guardado en memoria #${mem.id} [${tipo} · ${importancia}/10]: "${titulo}"`;
+  },
+
+  async ver_memoria() {
+    const memorias = await JarvisMemoryDB.listar({ soloActivas: true });
+    if (!memorias.length) return 'No tengo memorias guardadas aún.';
+    const lineas = memorias.map(m =>
+      `#${m.id} [${m.tipo} · ${m.importancia}/10] <b>${m.titulo}</b>\n   ${m.contenido}`
+    );
+    return `🧠 <b>Mi memoria (${memorias.length} entradas):</b>\n\n${lineas.join('\n\n')}`;
+  },
+
+  async olvidar({ id }) {
+    await JarvisMemoryDB.desactivar(id);
+    return `🗑️ Memoria #${id} desactivada.`;
   },
 };
 

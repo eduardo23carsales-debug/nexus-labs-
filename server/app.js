@@ -12,6 +12,7 @@ import webhooksRouter    from './routes/webhooks.js';
 import healthRouter      from './routes/health.js';
 import landingsRouter    from './routes/landings.js';
 import contactsRouter    from './routes/contacts.js';
+import memoryRouter      from './routes/memory.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,7 @@ app.use('/api',      rateLimiter, leadsRouter);
 app.use('/api',      salesRouter);
 app.use('/api',      webhooksRouter);
 app.use('/api',      contactsRouter);
+app.use('/api',      memoryRouter);
 app.use('/telegram', webhooksRouter);
 app.use('/',         contactsRouter);
 app.use('/',         landingsRouter);
