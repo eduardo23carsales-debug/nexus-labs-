@@ -77,20 +77,23 @@ export async function arrancar(app) {
     console.warn('[Orchestrator] META_PAGE_ID no configurado — webhook Meta no registrado');
   } else {
     try {
-      // Obtener Page Access Token (el user token no tiene permiso para /subscribed_apps)
-      const pageData = await MetaConnector.get(`/${ENV.META_PAGE_ID}`, { fields: 'access_token' });
-      const pageToken = pageData.access_token;
-      if (!pageToken) throw new Error('No se pudo obtener Page Access Token — verifica que el token tenga pages_show_list');
+      // Intentar obtener Page Access Token primero
+      let tokenParaSub = ENV.META_ACCESS_TOKEN;
+      try {
+        const pageData = await MetaConnector.get(`/${ENV.META_PAGE_ID}`, { fields: 'access_token' });
+        if (pageData.access_token) tokenParaSub = pageData.access_token;
+      } catch (_) {
+        // Si no se puede obtener page token, usar user token directamente
+      }
 
-      // Suscribir la página a eventos de leadgen usando el Page Token
       const { data: subData } = await axios.post(
         `https://graph.facebook.com/v25.0/${ENV.META_PAGE_ID}/subscribed_apps`,
-        { subscribed_fields: 'leadgen', access_token: pageToken },
+        { subscribed_fields: 'leadgen', access_token: tokenParaSub },
         { timeout: 15000 }
       );
       console.log(`[Orchestrator] Meta Lead Ads webhook suscrito ✅ → https://${ENV.RAILWAY_DOMAIN}/api/meta/webhook (success=${subData.success})`);
     } catch (err) {
-      console.warn(`[Orchestrator] No se pudo suscribir webhook Meta: ${err.message}`);
+      console.warn(`[Orchestrator] No se pudo suscribir webhook Meta: ${err.response?.data?.error?.message || err.message}`);
     }
   }
 
