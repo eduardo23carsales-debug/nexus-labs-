@@ -34,6 +34,7 @@ import ENV                                      from '../config/env.js';
 import { ProjectsDB }                           from '../crm/projects.db.js';
 import { TwilioConnector }                      from '../connectors/twilio.connector.js';
 import { JarvisMemoryDB }                       from '../memory/jarvis.db.js';
+import { GoogleCalendarConnector }              from '../connectors/google-calendar.connector.js';
 
 // ── Definiciones de tools para Claude ─────────────────
 export const TOOL_DEFINITIONS = [
@@ -649,6 +650,24 @@ NO uses pipeline_completo si Eduardo menciona un producto específico que ya exi
       required: ['nombre_o_id'],
     },
   },
+  // ── GOOGLE CALENDAR ───────────────────────────────
+  {
+    name: 'agendar_en_calendario',
+    description: `Agrega un evento al Google Calendar de Eduardo.
+Úsalo cuando Eduardo diga "agrégalo al calendario", "ponlo en mi agenda", "anota esa cita", o cuando alguien agenda una reunión/llamada importante.
+Las citas con clientes se agregan automáticamente — este tool es para eventos que Eduardo menciona manualmente.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        titulo:       { type: 'string', description: 'Título del evento (ej: "Reunión con Carlos — propuesta landing")' },
+        descripcion:  { type: 'string', description: 'Detalles del evento: quién, qué, contacto, notas' },
+        fecha:        { type: 'string', description: 'Fecha y hora en lenguaje natural (ej: "mañana a las 3pm", "viernes a las 10am", "el martes")' },
+        duracion_min: { type: 'number', description: 'Duración en minutos. Default: 60' },
+      },
+      required: ['titulo', 'fecha'],
+    },
+  },
+
   // ── MEMORIA PERSISTENTE ────────────────────────────
   {
     name: 'recordar',
@@ -1749,6 +1768,37 @@ export const TOOL_HANDLERS = {
   async olvidar({ id }) {
     await JarvisMemoryDB.desactivar(id);
     return `🗑️ Memoria #${id} desactivada.`;
+  },
+
+  async agendar_en_calendario({ titulo, fecha, hora, duracion_min = 60, descripcion = '' }) {
+    try {
+      // Construir inicio como ISO string desde fecha + hora en texto libre
+      let inicio;
+      const ahora = new Date();
+
+      // Intentar parsear fecha + hora directamente
+      const textoCompleto = `${fecha} ${hora}`.trim();
+      const intentoDirecto = new Date(textoCompleto);
+
+      if (!isNaN(intentoDirecto)) {
+        inicio = intentoDirecto.toISOString();
+      } else {
+        // Fallback: usar utilidad del GoogleCalendarConnector si tiene parseDate,
+        // o simplemente reportar que no se pudo parsear con claridad
+        return `⚠️ No pude entender la fecha "${fecha} ${hora}". Por favor usa formato como "2026-05-10 15:00" o "mayo 10 a las 3pm".`;
+      }
+
+      const resultado = await GoogleCalendarConnector.crearEventoPersonalizado({
+        titulo,
+        descripcion,
+        inicio,
+        duracion_min,
+      });
+
+      return `📅 Evento agregado al calendario: <b>${titulo}</b>\n🕐 ${fecha} ${hora} (${duracion_min} min)\n🔗 ${resultado?.htmlLink || 'Ver en Google Calendar'}`;
+    } catch (e) {
+      return `❌ Error agendando evento: ${e.message}`;
+    }
   },
 };
 

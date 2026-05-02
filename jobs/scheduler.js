@@ -9,6 +9,7 @@ import { revisarExperimentos } from '../scaling_agent/index.js';
 import { MetaConnector }       from '../connectors/meta.connector.js';
 import { TelegramConnector }   from '../connectors/telegram.connector.js';
 import { ResendConnector }     from '../connectors/resend.connector.js';
+import { HotmartConnector }   from '../connectors/hotmart.connector.js';
 
 export function iniciarScheduler() {
   // Validación de token Meta — cada medianoche ET
@@ -69,12 +70,15 @@ export function iniciarScheduler() {
       await ResendConnector.procesarPagosNuevos();
       await ResendConnector.procesarCarritosAbandonados();
       await ResendConnector.procesarSecuenciaPostCompra();
+      if (HotmartConnector.disponible()) {
+        await ResendConnector.procesarVentasHotmart();
+      }
     } catch (e) {
       console.error('[Scheduler] Error en secuencias email:', e.message);
     }
   }, { timezone: 'America/New_York' });
 
-  console.log('[Scheduler] Jobs iniciados: token-check (00h), analista (8h), supervisor (cada 4h + resumen lunes 9h), scaling (cada 6h), emails (cada 1h)');
+  console.log('[Scheduler] Jobs iniciados: token-check (00h), analista (8h), supervisor (cada 4h + resumen lunes 9h), scaling (cada 6h), emails (cada 1h, Stripe+Hotmart)');
 }
 
 export default iniciarScheduler;

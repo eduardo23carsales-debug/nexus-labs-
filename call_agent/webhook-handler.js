@@ -3,15 +3,18 @@
 // Resultado de llamadas → Telegram + memoria
 // ════════════════════════════════════════════════════
 
-import { TelegramConnector, esc }  from '../connectors/telegram.connector.js';
-import { CallsDB }                 from '../memory/calls.db.js';
-import { LeadsDB, ESTADOS }        from '../memory/leads.db.js';
-import { PlansDB }                 from '../memory/plans.db.js';
-import { ejecutarPlan }            from '../agents/ejecutor/index.js';
-import { ClientDB, ESTADOS_CRM }   from '../crm/client.db.js';
-import { notificarCitaConfirmada } from '../jarvis/notificar-cita.js';
-import { ConversationDB }          from '../memory/conversation.db.js';
-import ENV                         from '../config/env.js';
+import { TelegramConnector, esc }       from '../connectors/telegram.connector.js';
+import { CallsDB }                      from '../memory/calls.db.js';
+import { LeadsDB, ESTADOS }             from '../memory/leads.db.js';
+import { PlansDB }                      from '../memory/plans.db.js';
+import { ejecutarPlan }                 from '../agents/ejecutor/index.js';
+import { ClientDB, ESTADOS_CRM }        from '../crm/client.db.js';
+import { notificarCitaConfirmada }      from '../jarvis/notificar-cita.js';
+import { ConversationDB }               from '../memory/conversation.db.js';
+import { GoogleCalendarConnector }      from '../connectors/google-calendar.connector.js';
+import { ResendConnector }              from '../connectors/resend.connector.js';
+import { TwilioConnector }              from '../connectors/twilio.connector.js';
+import ENV                              from '../config/env.js';
 
 const ICONOS = {
   'ended':               '✅',
@@ -63,11 +66,38 @@ export async function procesarResultadoSofia(callData) {
     if (citaAgendada) {
       await LeadsDB.marcarCitaAgendada(telefono, { dia: diaCita, hora: horaCita });
       const clienteCita = await ClientDB.obtener(telefono);
+      const leadData    = await LeadsDB.obtener(telefono).catch(() => null);
+
       await notificarCitaConfirmada({
         nombre, telefono, diaCita, horaCita,
         nicho:  clienteCita?.nicho || null,
         notas:  callData.summary || null,
       });
+
+      // Google Calendar — evento automático en el calendario de Eduardo
+      GoogleCalendarConnector.crearEventoCita({
+        nombre, telefono, diaCita, horaCita,
+        nicho: clienteCita?.nicho || null,
+        notas: callData.summary  || null,
+      }).catch(e => console.warn('[Webhook] Calendar:', e.message));
+
+      // Email de confirmación al cliente (si tiene email registrado)
+      if (leadData?.email) {
+        ResendConnector.enviarConfirmacionCita({
+          para:     leadData.email,
+          nombre,
+          diaCita,
+          horaCita,
+          telefono,
+        }).catch(e => console.warn('[Webhook] Email cita:', e.message));
+      }
+
+      // SMS de confirmación al cliente
+      const detalleCitaSMS = [diaCita, horaCita].filter(Boolean).join(' a las ');
+      TwilioConnector.enviarSMS(telefono,
+        `✅ Hola ${nombre}, tu cita con Nexus Labs está confirmada${detalleCitaSMS ? ` para el ${detalleCitaSMS}` : ''}. ` +
+        `Te enviamos los detalles pronto. ¿Preguntas? Responde a este mensaje.`
+      ).catch(e => console.warn('[Webhook] SMS cita:', e.message));
     }
 
     // Siempre actualizar CRM con el resultado completo de la llamada

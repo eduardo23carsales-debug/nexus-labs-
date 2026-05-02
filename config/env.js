@@ -75,6 +75,13 @@ export const ENV = {
   TWILIO_WHATSAPP_FROM:   optional('TWILIO_WHATSAPP_FROM'),
   TWILIO_SMS_FROM:        optional('TWILIO_SMS_FROM'),
 
+  // Email directo a Eduardo
+  EDUARDO_EMAIL:          optional('EDUARDO_EMAIL', 'eduardo23carsales@gmail.com'),
+
+  // Google Calendar
+  GOOGLE_SERVICE_ACCOUNT_JSON: optional('GOOGLE_SERVICE_ACCOUNT_JSON'),
+  GOOGLE_CALENDAR_ID:     optional('GOOGLE_CALENDAR_ID', 'primary'),
+
   // Seguridad
   DASHBOARD_SECRET:       optional('DASHBOARD_SECRET', 'changeme'),
 };

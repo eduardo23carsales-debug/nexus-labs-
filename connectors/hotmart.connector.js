@@ -99,6 +99,33 @@ export const HotmartConnector = {
     return { ok: true, productos: res.data?.items?.length ?? 0 };
   },
 
+  // ── Ventas recientes (últimas 2 horas) ────────────
+  async getVentasRecientes(desdeMs = Date.now() - 2 * 60 * 60 * 1000) {
+    const token = await getToken();
+    const BASE_PAYMENTS = ENV.HOTMART_SANDBOX === 'true'
+      ? 'https://sandbox.hotmart.com/payments/api/v1'
+      : 'https://developers.hotmart.com/payments/api/v1';
+
+    const res = await axios.get(`${BASE_PAYMENTS}/sales/history`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params:  {
+        start_date:        desdeMs,
+        end_date:          Date.now(),
+        transaction_status: 'COMPLETE',
+        max_results:       50,
+      },
+    });
+
+    const items = res.data?.items || [];
+    return items.map(i => ({
+      transactionId: i.purchase?.transaction || i.transaction,
+      emailCliente:  i.buyer?.email,
+      nombreCliente: i.buyer?.name,
+      productoId:    String(i.product?.id || ''),
+      monto:         i.purchase?.price?.value || 0,
+    }));
+  },
+
   // ── ¿Está configurado? ─────────────────────────────
   disponible() {
     return !!(ENV.HOTMART_CLIENT_ID && ENV.HOTMART_CLIENT_SECRET);

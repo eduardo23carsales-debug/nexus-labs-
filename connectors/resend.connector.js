@@ -391,6 +391,128 @@ export const ResendConnector = {
     if (error) throw new Error(error.message);
     return { ok: true, para, asunto };
   },
+
+  // ── Alerta crítica directo al email de Eduardo ─────
+  async alertarEduardo({ asunto, cuerpo, urgente = false }) {
+    if (!ENV.RESEND_API_KEY || !ENV.EDUARDO_EMAIL) return;
+    const resend = await getResend();
+    const emoji  = urgente ? '🚨' : '📬';
+    const html   = `
+      <div style="font-family:sans-serif;background:#0f0f0f;color:#e0e0e0;padding:32px;max-width:600px;margin:0 auto;border-radius:12px;">
+        <div style="border-left:4px solid ${urgente ? '#ff4444' : '#00ff88'};padding-left:16px;margin-bottom:24px;">
+          <h2 style="color:${urgente ? '#ff4444' : '#00ff88'};margin:0;">${emoji} ${asunto}</h2>
+        </div>
+        <div style="background:#1a1a1a;border-radius:8px;padding:24px;">
+          ${cuerpo.replace(/\n/g, '<br>')}
+        </div>
+        <p style="color:#555;font-size:0.8em;margin-top:24px;">— Jarvis · Nexus Labs</p>
+      </div>`;
+    await resend.emails.send({
+      from:    `${FROM_NAME()} <${FROM()}>`,
+      to:      ENV.EDUARDO_EMAIL,
+      subject: `${emoji} ${asunto}`,
+      html,
+    });
+    console.log(`[Resend] Alerta enviada a Eduardo: ${asunto}`);
+  },
+
+  // ── Confirmación de cita al cliente ───────────────
+  async enviarConfirmacionCita({ para, nombre, diaCita, horaCita, negocio = 'Nexus Labs', telefono }) {
+    if (!ENV.RESEND_API_KEY || !para) return;
+    const resend   = await getResend();
+    const detalle  = [diaCita, horaCita].filter(Boolean).join(' a las ');
+    const html     = `
+      <div style="font-family:sans-serif;background:#0f0f0f;color:#e0e0e0;padding:32px;max-width:600px;margin:0 auto;border-radius:12px;">
+        <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:32px;border-radius:12px 12px 0 0;text-align:center;">
+          <h1 style="color:#00ff88;margin:0;font-size:1.8em;">✅ Cita Confirmada</h1>
+          <p style="color:#aaa;margin:8px 0 0;">Tu sesión con ${negocio} está agendada</p>
+        </div>
+        <div style="background:#1a1a1a;padding:32px;border-radius:0 0 12px 12px;">
+          <p style="color:#e0e0e0;">Hola <strong style="color:#00ff88;">${nombre}</strong>,</p>
+          <p style="color:#ccc;">Tu cita ha sido confirmada exitosamente. Aquí están los detalles:</p>
+          <div style="background:#0f0f0f;border:1px solid #00ff88;border-radius:8px;padding:20px;margin:24px 0;">
+            <p style="margin:0 0 8px;color:#aaa;font-size:0.9em;">FECHA Y HORA</p>
+            <p style="margin:0;color:#00ff88;font-size:1.4em;font-weight:bold;">📅 ${detalle || 'A confirmar por el equipo'}</p>
+          </div>
+          <p style="color:#ccc;">Recibirás los detalles de acceso poco antes de la cita.</p>
+          <p style="color:#ccc;">Si necesitas cambiar el horario, responde a este email o escríbenos.</p>
+          <p style="color:#aaa;font-size:0.9em;margin-top:32px;">— El equipo de ${negocio}</p>
+        </div>
+      </div>`;
+    const { error } = await resend.emails.send({
+      from:    `${FROM_NAME()} <${FROM()}>`,
+      to:      para,
+      subject: `✅ Tu cita está confirmada${detalle ? ` — ${detalle}` : ''}`,
+      html,
+    });
+    if (error) console.error('[Resend] Error confirmación cita:', error.message);
+    else console.log(`[Resend] Confirmación de cita enviada a ${para}`);
+  },
+
+  // ── Procesar ventas de Hotmart y entregar productos ─
+  async procesarVentasHotmart() {
+    const { HotmartConnector } = await import('./hotmart.connector.js');
+    if (!HotmartConnector.disponible()) return 0;
+
+    const ventas = await HotmartConnector.getVentasRecientes().catch(() => []);
+    if (!ventas.length) return 0;
+
+    let procesadas = 0;
+    for (const venta of ventas) {
+      try {
+        const { emailCliente, nombreCliente, productoId, monto, transactionId } = venta;
+        if (!emailCliente || !productoId) continue;
+
+        // Verificar si ya fue procesada
+        const { rows } = await query(
+          `SELECT id FROM conversions WHERE notas = $1 LIMIT 1`,
+          [`hotmart:${transactionId}`]
+        ).catch(() => ({ rows: [] }));
+        if (rows.length) continue;
+
+        // Buscar experimento
+        const { rows: exps } = await query(
+          `SELECT * FROM experiments WHERE hotmart_id = $1 LIMIT 1`,
+          [String(productoId)]
+        ).catch(() => ({ rows: [] }));
+        const exp = exps[0];
+        if (!exp) continue;
+
+        // Registrar conversión
+        await query(
+          `INSERT INTO conversions (nombre, segmento, valor, notas) VALUES ($1, $2, $3, $4)`,
+          [nombreCliente || emailCliente, `hotmart-${exp.nombre}`, monto, `hotmart:${transactionId}`]
+        ).catch(() => {});
+
+        // Entregar producto por email
+        const dominio    = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+        const productoUrl = exp.landing_slug ? `${dominio}/acceso/${exp.landing_slug}` : exp.producto_url;
+        await this.entregarProducto({
+          para:           emailCliente,
+          nombreCliente,
+          nombreProducto: exp.nombre,
+          contenido:      exp.contenido_producto,
+          productoUrl,
+          stripePaymentId: transactionId,
+        });
+
+        // Actualizar métricas del experimento
+        const metricas = exp.metricas || {};
+        metricas.ventas  = (metricas.ventas  || 0) + 1;
+        metricas.revenue = (metricas.revenue || 0) + monto;
+        await query(
+          `UPDATE experiments SET metricas = $1, actualizado_en = NOW() WHERE id = $2`,
+          [JSON.stringify(metricas), exp.id]
+        ).catch(() => {});
+
+        procesadas++;
+        console.log(`[Resend] Venta Hotmart procesada — ${emailCliente} — ${exp.nombre} — $${monto}`);
+      } catch (err) {
+        console.error('[Resend] Error procesando venta Hotmart:', err.message);
+      }
+    }
+    return procesadas;
+  },
 };
 
 // ── HTML de entrega de producto ────────────────────
