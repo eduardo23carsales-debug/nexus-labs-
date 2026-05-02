@@ -282,3 +282,21 @@ CREATE TABLE IF NOT EXISTS email_tracking (
 
 CREATE INDEX IF NOT EXISTS idx_email_tracking_campaign ON email_tracking(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_email_tracking_email    ON email_tracking(email);
+
+
+-- ── CONFIGURACIÓN DEL SISTEMA ────────────────────────
+CREATE TABLE IF NOT EXISTS system_config (
+  clave          VARCHAR(100)  PRIMARY KEY,
+  valor          TEXT          NOT NULL,
+  descripcion    TEXT,
+  actualizado_en TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+-- Valores por defecto (INSERT ... ON CONFLICT DO NOTHING → no sobreescribe cambios)
+INSERT INTO system_config (clave, valor, descripcion) VALUES
+  ('presupuesto_max_dia',   '30',   'Gasto máximo diario en Meta Ads (USD)'),
+  ('limite_escalar_solo',   '10',   'El Supervisor puede escalar solo hasta este monto extra (USD)'),
+  ('limite_gasto_sin_lead', '4',    'Pausa campaña si gasta este monto sin generar leads (USD)'),
+  ('max_escalar_pct',       '0.20', 'Máximo porcentaje de aumento de presupuesto por ciclo (0.20 = 20%)'),
+  ('cpl_objetivo',          '5',    'CPL objetivo — por debajo de esto la campaña es buena (USD)')
+ON CONFLICT (clave) DO NOTHING;

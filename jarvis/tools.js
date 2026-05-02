@@ -34,6 +34,7 @@ import ENV                                      from '../config/env.js';
 import { ProjectsDB }                           from '../crm/projects.db.js';
 import { TwilioConnector }                      from '../connectors/twilio.connector.js';
 import { JarvisMemoryDB }                       from '../memory/jarvis.db.js';
+import { SystemConfigDB }                       from '../memory/config.db.js';
 import { GoogleCalendarConnector }              from '../connectors/google-calendar.connector.js';
 
 // ── Definiciones de tools para Claude ─────────────────
@@ -686,6 +687,27 @@ Ejemplos:
         importancia: { type: 'number', description: 'Del 1 al 10. 10 = crítico, 5 = normal, 1 = trivial' },
       },
       required: ['titulo', 'contenido'],
+    },
+  },
+  {
+    name: 'ver_configuracion',
+    description: 'Muestra los límites y configuración actual del sistema (presupuesto máximo, CPL objetivo, etc.). Úsalo cuando Eduardo pregunta "cuánto es el límite", "qué configuración tienes" o antes de proponer cambios de presupuesto.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'actualizar_configuracion',
+    description: 'Actualiza un límite o parámetro del sistema. Úsalo cuando Eduardo dice "sube el límite a X", "cambia el CPL objetivo a Y", "pon el máximo en Z". Claves válidas: presupuesto_max_dia, limite_escalar_solo, limite_gasto_sin_lead, max_escalar_pct, cpl_objetivo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clave: {
+          type: 'string',
+          description: 'Nombre del parámetro a cambiar',
+          enum: ['presupuesto_max_dia', 'limite_escalar_solo', 'limite_gasto_sin_lead', 'max_escalar_pct', 'cpl_objetivo'],
+        },
+        valor: { type: 'number', description: 'Nuevo valor numérico' },
+      },
+      required: ['clave', 'valor'],
     },
   },
   {
@@ -1768,6 +1790,20 @@ export const TOOL_HANDLERS = {
   async olvidar({ id }) {
     await JarvisMemoryDB.desactivar(id);
     return `🗑️ Memoria #${id} desactivada.`;
+  },
+
+  async ver_configuracion() {
+    const cfg = await SystemConfigDB.getAll();
+    const lineas = Object.entries(cfg).map(([clave, { valor, descripcion }]) =>
+      `• <b>${clave}</b>: <code>${valor}</code>\n  ${descripcion}`
+    );
+    return `⚙️ <b>Configuración del sistema</b>\n\n${lineas.join('\n\n')}`;
+  },
+
+  async actualizar_configuracion({ clave, valor }) {
+    const anterior = await SystemConfigDB.get(clave);
+    await SystemConfigDB.set(clave, valor);
+    return `✅ <b>${clave}</b> actualizado: ${anterior} → <b>${valor}</b>\nEl cambio aplica de inmediato — sin necesidad de redesplegar.`;
   },
 
   async agendar_en_calendario({ titulo, fecha, hora, duracion_min = 60, descripcion = '' }) {
