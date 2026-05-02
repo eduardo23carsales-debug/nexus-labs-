@@ -4,7 +4,6 @@
 
 import { Router }         from 'express';
 import { procesarLead }   from '../../lead_system/capture.js';
-import { programarLlamada } from '../../call_agent/caller.js';
 
 const router = Router();
 
@@ -22,7 +21,7 @@ router.post('/lead', async (req, res) => {
 
     await procesarLead(
       { nombre, telefono, email, segmento, ingresos, tiempo, fuente: 'web' },
-      { programarLlamada }
+      {} // Sofia pausada — solo Eduardo activa llamadas desde Jarvis
     );
 
   } catch (err) {

@@ -62,7 +62,7 @@ router.post('/meta/webhook', async (req, res) => {
     if (telefono) {
       await procesarLead(
         { nombre, telefono, email, segmento, fuente: 'meta-leadgen' },
-        { programarLlamada }
+        {} // Sofia pausada — solo Eduardo activa llamadas desde Jarvis
       );
     }
   } catch (err) {
