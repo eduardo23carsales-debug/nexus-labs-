@@ -10,6 +10,7 @@ import { TelegramConnector, esc }  from '../../connectors/telegram.connector.js'
 import { CampaignManager }         from '../../ads_engine/campaign-manager.js';
 import { SupervisorMemory }        from './memory.js';
 import BUSINESS                    from '../../config/business.config.js';
+import { FinancialControl }        from '../../financial_control/index.js';
 
 const ICONOS = { pausar: '⏸', escalar: '📈', reducir: '📉', alerta: '⚠️', mantener: '✅' };
 
@@ -183,6 +184,12 @@ Devuelve ÚNICAMENTE un JSON array con una decisión por campaña, sin markdown 
           if (d.decision === 'pausar') {
             await CampaignManager.pausar(d.campana_id);
           } else if ((d.decision === 'escalar' || d.decision === 'reducir') && d.nuevo_presupuesto) {
+            const check = FinancialControl.validarPresupuestoDia(d.nuevo_presupuesto);
+            if (!check.ok) {
+              await TelegramConnector.notificar(`🛑 <b>Supervisor bloqueado:</b> ${esc(d.campana_nombre)}\n${esc(check.error)}`);
+              await SupervisorMemory.marcarResultado(decisionId, 'bloqueado_financial');
+              continue;
+            }
             await CampaignManager.cambiarPresupuesto(d.campana_id, d.nuevo_presupuesto);
           }
           await SupervisorMemory.marcarResultado(decisionId, 'ejecutado');

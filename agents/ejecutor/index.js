@@ -9,6 +9,7 @@ import { crearCampana }           from '../../ads_engine/campaign-creator.js';
 import { CampaignManager }        from '../../ads_engine/campaign-manager.js';
 import { ProjectsDB }             from '../../crm/projects.db.js';
 import { PlansDB }                from '../../memory/plans.db.js';
+import { FinancialControl }       from '../../financial_control/index.js';
 
 export async function ejecutarPlan(plan) {
   console.log('[Ejecutor] Ejecutando plan aprobado...');
@@ -26,9 +27,15 @@ export async function ejecutarPlan(plan) {
       }
     }
 
-    // 2. Escalar campañas
+    // 2. Escalar campañas (con validación financiera)
     for (const e of (plan.escalar || [])) {
       try {
+        const check = FinancialControl.validarEscala(e.presupuesto_actual || 0, e.presupuesto_nuevo);
+        if (!check.ok) {
+          acciones.push(`🛑 Escala bloqueada: <b>${esc(e.nombre)}</b> — ${esc(check.error)}`);
+          console.warn(`[Ejecutor] Escala bloqueada: ${e.nombre} — ${check.error}`);
+          continue;
+        }
         await CampaignManager.cambiarPresupuesto(e.id, e.presupuesto_nuevo);
         acciones.push(`📈 Escalada: <b>${esc(e.nombre)}</b> → $${e.presupuesto_nuevo}/día`);
         console.log(`[Ejecutor] Escalada: ${e.nombre} a $${e.presupuesto_nuevo}/día`);
@@ -37,9 +44,15 @@ export async function ejecutarPlan(plan) {
       }
     }
 
-    // 3. Crear campañas nuevas
+    // 3. Crear campañas nuevas (con validación financiera)
     for (const c of (plan.crear || [])) {
       try {
+        const check = FinancialControl.validarPresupuestoDia(c.presupuesto);
+        if (!check.ok) {
+          acciones.push(`🛑 Creación bloqueada: <b>${esc(c.segmento)}</b> — ${esc(check.error)}`);
+          console.warn(`[Ejecutor] Creación bloqueada: ${c.segmento} — ${check.error}`);
+          continue;
+        }
         acciones.push(`⏳ Creando <b>${esc(c.segmento)}</b>...`);
         const result = await crearCampana(c.segmento, c.presupuesto);
         acciones.push(`🚀 Creada: <b>${esc(c.segmento)}</b> — ${result.ads.length} ads activos`);

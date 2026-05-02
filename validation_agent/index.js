@@ -14,16 +14,36 @@ import { TelegramConnector, esc } from '../connectors/telegram.connector.js';
 import { CampaignManager }        from '../ads_engine/campaign-manager.js';
 import { crearCampana }           from '../ads_engine/campaign-creator.js';
 import BUSINESS                   from '../config/business.config.js';
+import { query }                  from '../config/database.js';
 
-const PRESUPUESTO_SANDBOX      = 7;     // $7/día para pruebas
-const DURACION_HORAS           = 72;    // 3 días de prueba
-const LEADS_MINIMOS            = 3;     // mínimo para tener datos
-const CPL_BENCHMARK_DEFAULT    = BUSINESS.campana.cplObjetivo;
-const CTR_MINIMO               = 1.0;   // 1% CTR mínimo
+const PRESUPUESTO_SANDBOX   = 7;
+const DURACION_HORAS        = 72;
+const CPL_BENCHMARK_DEFAULT = BUSINESS.campana.cplObjetivo;
 
-// Almacenamiento en memoria de experimentos activos
-// (en producción esto debería estar en la DB)
-const _experimentos = new Map();
+// ── Persistencia en DB (tabla experiments) ────────────
+const ValDB = {
+  async guardar(exp) {
+    const { rows } = await query(
+      `INSERT INTO experiments (nicho, nombre, tipo, precio, estado, metricas)
+       VALUES ($1,$2,$3,0,'validando',$4) RETURNING id`,
+      [exp.segmento, exp.descripcion, exp.tipo, JSON.stringify(exp)]
+    );
+    return rows[0]?.id;
+  },
+  async obtener(id) {
+    const { rows } = await query(`SELECT * FROM experiments WHERE id=$1`, [id]);
+    if (!rows[0]) return null;
+    const meta = rows[0].metricas || {};
+    return { ...(typeof meta === 'string' ? JSON.parse(meta) : meta), _dbId: rows[0].id, estado: rows[0].estado };
+  },
+  async listar() {
+    const { rows } = await query(`SELECT * FROM experiments WHERE estado='validando' ORDER BY creado_en DESC`);
+    return rows;
+  },
+  async actualizar(id, estado) {
+    await query(`UPDATE experiments SET estado=$1, actualizado_en=NOW() WHERE id=$2`, [estado, id]);
+  },
+};
 
 // ── Función principal: iniciar validación ────────────
 export async function validarIdea({
@@ -79,7 +99,6 @@ Devuelve:
   }
 
   const experimento = {
-    id:               `val_${Date.now()}`,
     tipo,
     descripcion:      descripcion || segmentoTarget,
     segmento:         segmentoTarget,
@@ -94,12 +113,13 @@ Devuelve:
     venceEn:          new Date(Date.now() + DURACION_HORAS * 3600_000).toISOString(),
   };
 
-  _experimentos.set(experimento.id, experimento);
+  const dbId = await ValDB.guardar(experimento).catch(() => null);
+  const experimento_id = dbId || `val_${Date.now()}`;
 
   await TelegramConnector.notificar(
     `🧪 <b>Validation Agent — Experimento iniciado</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `📌 Tipo: ${tipo}\n` +
+    `📌 Tipo: ${tipo} · ID: ${experimento_id}\n` +
     `🎯 ${esc(brief.hipotesis)}\n` +
     `💵 $${presupuestoPrueba}/día × ${DURACION_HORAS / 24} días = $${presupuestoPrueba * (DURACION_HORAS / 24)}\n` +
     `✅ Éxito: ${esc(brief.criterio_exito)}\n` +
@@ -107,14 +127,14 @@ Devuelve:
     `⏱️ Vence: ${new Date(experimento.venceEn).toLocaleString('es-US', { timeZone: 'America/New_York' })}`
   );
 
-  return experimento;
+  return { ...experimento, id: experimento_id };
 }
 
 // ── Verificar resultados de un experimento ───────────
 export async function verificarResultado(experimentId) {
-  const exp = _experimentos.get(experimentId);
+  const exp = await ValDB.obtener(experimentId).catch(() => null);
   if (!exp) {
-    throw new Error(`Experimento ${experimentId} no encontrado`);
+    throw new Error(`Experimento ${experimentId} no encontrado en DB`);
   }
 
   if (!exp.campanaSandboxId) {
@@ -162,10 +182,10 @@ Devuelve:
 }`,
   });
 
-  // Si completado, pausar la campaña sandbox para no gastar más
+  // Si completado, pausar la campaña sandbox y actualizar estado en DB
   if (completado && exp.campanaSandboxId) {
     await CampaignManager.pausar(exp.campanaSandboxId).catch(() => {});
-    exp.estado = 'completado';
+    await ValDB.actualizar(experimentId, 'completado').catch(() => {});
   }
 
   const resultado = {
@@ -188,8 +208,8 @@ Devuelve:
 }
 
 // ── Listar experimentos activos ──────────────────────
-export function listarExperimentos() {
-  return Array.from(_experimentos.values());
+export async function listarExperimentos() {
+  return ValDB.listar().catch(() => []);
 }
 
 export default { validarIdea, verificarResultado, listarExperimentos };
