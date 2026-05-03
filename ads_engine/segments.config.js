@@ -33,7 +33,7 @@ export const SEGMENTOS = {
         cta:     'Quiero empezar',
       },
     ],
-    imagenPrompt: 'Hispanic entrepreneur working from laptop at home in Miami, focused expression, modern home office, digital products on screen, realistic photo',
+    imagenPrompt: 'Hands typing on a sleek MacBook in a cozy modern home office, warm golden ambient lamp, small succulent on desk, shallow depth of field bokeh background, no faces, no text on screen, shot on Canon EOS R5 f/1.8, cinematic color grading, 8K ultra-detailed',
   },
 
   'emprendedor-escalar': {
@@ -59,7 +59,7 @@ export const SEGMENTOS = {
         cta:     'Cómo lo lograron',
       },
     ],
-    imagenPrompt: 'Successful Hispanic entrepreneur scaling their digital business, analytics dashboard showing growth, professional Miami setting, realistic photo',
+    imagenPrompt: 'Minimalist entrepreneur workspace with dual monitors showing revenue growth charts, morning light through floor-to-ceiling window, organized desk with open notebook and coffee cup, over-the-shoulder angle no face visible, no text labels, professional commercial photography, cinematic lighting, 8K',
   },
 
   'afiliado-hotmart': {
@@ -85,7 +85,7 @@ export const SEGMENTOS = {
         cta:     'Empezar ahora',
       },
     ],
-    imagenPrompt: 'Hispanic person excited looking at commissions on Hotmart dashboard, laptop screen visible, home office in Miami, realistic photo',
+    imagenPrompt: 'Close-up of hands holding smartphone showing large dollar commission amounts on a clean earnings app, blurred modern home office background, warm ambient lighting, no face visible, no brand logos, shallow depth of field, professional product photography, cinematic color grade, 8K',
   },
 
   'infoproductor': {
@@ -111,7 +111,7 @@ export const SEGMENTOS = {
         cta:     'Monetizar mi conocimiento',
       },
     ],
-    imagenPrompt: 'Hispanic professional creating online course content, recording setup with ring light, laptop with course platform visible, Miami backdrop, realistic photo',
+    imagenPrompt: 'Professional home studio recording setup: large ring light illuminating a microphone and open laptop, dark background with warm accent lighting, no faces, notebooks and headphones on desk, over-the-shoulder view, commercial studio photography, 8K cinematic',
   },
 
   'oferta-especial': {
@@ -137,7 +137,7 @@ export const SEGMENTOS = {
         cta:     'Entrar ahora',
       },
     ],
-    imagenPrompt: 'Exciting digital product launch with countdown timer, Hispanic entrepreneur celebrating success, Miami digital office environment, realistic photo',
+    imagenPrompt: 'Premium laptop on dark luxury desk displaying a glowing countdown timer, dramatic moody lighting with gold accents, sense of scarcity and exclusivity, no people, no faces, wide bokeh background, high-end commercial photography, 8K cinematic lighting',
   },
 
 };
