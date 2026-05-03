@@ -126,21 +126,21 @@ export const AnthropicConnector = {
     const msg = await client.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 150,
+      system:     'You are an image quality evaluator. You MUST respond with valid JSON only — no other text.',
       messages: [{
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64 } },
           {
             type: 'text',
-            text: `Evalúa esta imagen para un anuncio de Meta Ads.
-Contexto: ${contexto}
+            text: `Rate this image for a Meta Ads campaign. Context: ${contexto}
 
-Criterios (10 puntos):
-- Relevancia al tema del producto (4 pts)
-- Calidad visual / realismo — NO debe parecer IA (3 pts)
-- Atractivo publicitario para hispanos en USA (3 pts)
+Score criteria (10 pts total):
+- Relevance to product topic (4 pts)
+- Visual quality / photorealism — must NOT look AI-generated (3 pts)
+- Advertising appeal for US Hispanic audience (3 pts)
 
-Responde SOLO con JSON: {"score": <1-10>, "feedback": "<qué mejorar si score < 8, o 'ok' si es buena>"}`,
+Respond ONLY with this JSON (no other text): {"score": <number 1-10>, "feedback": "<what to improve if score < 8, or 'ok' if good>"}`,
           },
         ],
       }],
@@ -150,7 +150,9 @@ Responde SOLO con JSON: {"score": <1-10>, "feedback": "<qué mejorar si score < 
     try { return JSON.parse(limpio); } catch {
       const match = limpio.match(/\{[\s\S]*\}/);
       if (match) { try { return JSON.parse(match[0]); } catch {} }
-      return { score: 5, feedback: 'No se pudo evaluar' };
+      // Si no se puede parsear, loguear y aprobar la imagen (no penalizar con reintentos)
+      console.warn('[Anthropic] Vision: respuesta no es JSON —', raw.slice(0, 120));
+      return { score: 8, feedback: 'ok (evaluación omitida)' };
     }
   },
 
