@@ -145,12 +145,11 @@ Respond ONLY with this JSON (no other text): {"score": <number 1-10>, "feedback"
         ],
       }],
     });
-    const raw    = msg.content[0].text.trim();
-    const limpio = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const raw    = msg.content[0].text;
+    const limpio = raw.trim().replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
     try { return JSON.parse(limpio); } catch {
-      const match = limpio.match(/\{[\s\S]*\}/);
+      const match = limpio.match(/\{[\s\S]*?\}/);
       if (match) { try { return JSON.parse(match[0]); } catch {} }
-      // Si no se puede parsear, loguear y aprobar la imagen (no penalizar con reintentos)
       console.warn('[Anthropic] Vision: respuesta no es JSON —', raw.slice(0, 120));
       return { score: 8, feedback: 'ok (evaluación omitida)' };
     }

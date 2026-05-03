@@ -81,7 +81,7 @@ export async function generarYSubirImagen(prompt) {
 
 // ── Prompt de imagen genérico por tipo de copy (fallback sin producto) ────
 function promptImagenParaCopy(copy, seg) {
-  const calidad = 'photorealistic professional advertisement photo, cinematic lighting, 8K ultra-detailed, no text overlay, no watermark, no AI-looking artifacts, no cartoon style, no stock photo cliché';
+  const calidad = 'photorealistic professional advertisement photo, cinematic lighting, 8K ultra-detailed, no text overlay, no watermark, no AI-looking artifacts, no cartoon style, no stock photo cliché, no hands, no faces, objects and environments only';
   const variantes = {
     emocional: `${seg.imagenPrompt}, emotional lifestyle moment, warm aspirational atmosphere, person experiencing transformation and relief, golden hour, real human emotion. ${calidad}`,
     directo:   `${seg.imagenPrompt}, clean professional environment, clear product benefit visible, high contrast, sharp focus, modern minimalist aesthetic, trustworthy and credible. ${calidad}`,
@@ -108,8 +108,8 @@ Niche: ${nicho}
 Visual style: ${estilo}
 
 Rules (mandatory):
-- NO faces looking at camera (uncanny valley)
-- Use hands, objects, environments, over-the-shoulder angles, or silhouettes
+- NO faces, NO hands, NO body parts (DALL-E renders them poorly)
+- Use objects, documents, environments, symbolic scenes only
 - NO text or logos in the image
 - Photorealistic, cinematic lighting, 8K, not AI-looking
 
@@ -135,7 +135,7 @@ async function generarImagenValidada(promptBase, contexto, maxIntentos = 3) {
     const val = await AnthropicConnector.analizarImagen(buf, contexto);
     console.log(`[AdsEngine] Imagen intento ${intento}/${maxIntentos} — score ${val.score}/10: ${val.feedback}`);
 
-    if (val.score >= 7) {
+    if (val.score >= 6) {
       const tmp = path.join('/tmp', `dalleimg_${Date.now()}.jpg`);
       fs.writeFileSync(tmp, buf);
       const hash = await subirFotoLocal(tmp);
