@@ -146,7 +146,14 @@ export const GoogleCalendarConnector = {
           description: descripcion || '',
           start: { dateTime: fechaInicio.toISOString(), timeZone: 'America/New_York' },
           end:   { dateTime: fechaFin.toISOString(),    timeZone: 'America/New_York' },
-          reminders: { useDefault: true },
+          reminders: {
+            useDefault: false,
+            overrides: [
+              { method: 'popup', minutes: 60 },
+              { method: 'popup', minutes: 15 },
+              { method: 'popup', minutes: 0  },
+            ],
+          },
         },
       });
       return { id: res.data.id, url: res.data.htmlLink };
