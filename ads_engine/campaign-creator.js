@@ -62,9 +62,8 @@ async function subirVideoLocal(filePath) {
   return data.id;
 }
 
-// ── Generar imagen con DALL-E y subirla ──────────────
-export async function generarYSubirImagen(prompt) {
-  const url  = await OpenAIConnector.generarImagen({ prompt });
+// ── Descargar URL de imagen y subir a Meta ────────────
+async function descargarYSubir(url) {
   const resp = await axios.get(url, { responseType: 'arraybuffer' });
   const buf  = Buffer.from(resp.data);
   const tmp  = path.join('/tmp', `dalleimg_${Date.now()}.jpg`);
@@ -72,6 +71,46 @@ export async function generarYSubirImagen(prompt) {
   const hash = await subirFotoLocal(tmp);
   fs.unlinkSync(tmp);
   return { hash, url };
+}
+
+// ── Generar imagen con DALL-E y subirla ──────────────
+export async function generarYSubirImagen(prompt) {
+  const url = await OpenAIConnector.generarImagen({ prompt });
+  return await descargarYSubir(url);
+}
+
+// ── Prompt de imagen adaptado al tipo de copy ─────────
+function promptImagenParaCopy(copy, seg) {
+  const calidad = 'photorealistic professional advertisement photo, cinematic lighting, 8K ultra-detailed, no text overlay, no watermark, no AI-looking artifacts, no cartoon style, no stock photo cliché';
+  const variantes = {
+    emocional: `${seg.imagenPrompt}, emotional lifestyle moment, warm aspirational atmosphere, person experiencing transformation and relief, golden hour, real human emotion. ${calidad}`,
+    directo:   `${seg.imagenPrompt}, clean professional environment, clear product benefit visible, high contrast, sharp focus, modern minimalist aesthetic, trustworthy and credible. ${calidad}`,
+    urgencia:  `${seg.imagenPrompt}, dynamic energetic scene, bold dramatic lighting, momentum and opportunity, action-oriented composition, sense of urgency. ${calidad}`,
+  };
+  return variantes[copy.tipo] || `${seg.imagenPrompt}. ${calidad}`;
+}
+
+// ── Generar imagen, validar con Claude Vision, reintentar si calidad baja ──
+async function generarImagenValidada(promptBase, contexto, maxIntentos = 3) {
+  let prompt    = promptBase;
+  let ultimaUrl = null;
+
+  for (let intento = 1; intento <= maxIntentos; intento++) {
+    const url = await OpenAIConnector.generarImagen({ prompt });
+    ultimaUrl  = url;
+
+    const val = await AnthropicConnector.analizarImagen(url, contexto);
+    console.log(`[AdsEngine] Imagen intento ${intento}/${maxIntentos} — score ${val.score}/10: ${val.feedback}`);
+
+    if (val.score >= 7) return await descargarYSubir(url);
+
+    if (intento < maxIntentos) {
+      prompt = `${promptBase}. Improve: ${val.feedback}. Must look 100% photorealistic, not AI-generated.`;
+    }
+  }
+
+  console.log(`[AdsEngine] Score insuficiente tras ${maxIntentos} intentos — usando última imagen`);
+  return await descargarYSubir(ultimaUrl);
 }
 
 // ── Generar copies específicos del producto con Claude ──
@@ -146,23 +185,22 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
     bid_strategy:          'LOWEST_COST_WITHOUT_CAP',
   });
 
-  // 2. Asset (imagen override > video > foto > DALL-E)
-  let assetTipo, assetId;
+  // 2. Asset (imagen override > video > foto > DALL-E único por copy)
+  let assetTipo, assetIdFijo = null;
   const videoPath = buscarVideo(segmento);
   const fotoPath  = buscarFoto(segmento);
 
   if (imagenHash) {
-    assetTipo = 'imagen';
-    assetId   = imagenHash;
+    assetTipo   = 'imagen';
+    assetIdFijo = imagenHash;
   } else if (videoPath) {
-    assetTipo = 'video';
-    assetId   = await subirVideoLocal(videoPath);
+    assetTipo   = 'video';
+    assetIdFijo = await subirVideoLocal(videoPath);
   } else if (fotoPath) {
-    assetTipo = 'imagen';
-    assetId   = await subirFotoLocal(fotoPath);
+    assetTipo   = 'imagen';
+    assetIdFijo = await subirFotoLocal(fotoPath);
   } else {
-    assetTipo = 'dalle';
-    assetId   = (await generarYSubirImagen(seg.imagenPrompt)).hash;
+    assetTipo = 'dalle';  // cada copy genera su propia imagen dentro del loop
   }
 
   // 3. Formulario nativo (con redirect a Stripe si está disponible)
@@ -174,6 +212,14 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
   for (const copy of copiasEfectivas) {
     try {
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
+
+      // Imagen única por copy cuando es DALL-E (video/foto se comparte — son assets reales)
+      let assetId = assetIdFijo;
+      if (assetTipo === 'dalle') {
+        const promptCopy = promptImagenParaCopy(copy, seg);
+        const contexto   = `Meta Ad para "${copy.titulo}" — ${seg.nombre}, audiencia hispana USA, estilo ${copy.tipo}`;
+        assetId = (await generarImagenValidada(promptCopy, contexto)).hash;
+      }
 
       // AdSet — sin budget ni bid_strategy (ambos viven en la campaña con CBO)
       const adset = await MetaConnector.post(`/${adAccount()}/adsets`, {
@@ -248,20 +294,19 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
     bid_strategy:          'LOWEST_COST_WITHOUT_CAP',
   });
 
-  // 2. Asset (video > foto > DALL-E)
-  let assetTipo, assetId;
+  // 2. Asset (video > foto > DALL-E único por copy)
+  let assetTipo, assetIdFijo = null;
   const videoPath = buscarVideo(segmento);
   const fotoPath  = buscarFoto(segmento);
 
   if (videoPath) {
-    assetTipo = 'video';
-    assetId   = await subirVideoLocal(videoPath);
+    assetTipo   = 'video';
+    assetIdFijo = await subirVideoLocal(videoPath);
   } else if (fotoPath) {
-    assetTipo = 'imagen';
-    assetId   = await subirFotoLocal(fotoPath);
+    assetTipo   = 'imagen';
+    assetIdFijo = await subirFotoLocal(fotoPath);
   } else {
-    assetTipo = 'dalle';
-    assetId   = (await generarYSubirImagen(seg.imagenPrompt)).hash;
+    assetTipo = 'dalle';  // cada copy genera su propia imagen dentro del loop
   }
 
   // 3. AdSets + Creativos + Ads — usa copies específicos del producto si se pasan
@@ -270,6 +315,14 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
   for (const copy of copiasEfectivas) {
     try {
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
+
+      // Imagen única por copy cuando es DALL-E (video/foto se comparte — son assets reales)
+      let assetId = assetIdFijo;
+      if (assetTipo === 'dalle') {
+        const promptCopy = promptImagenParaCopy(copy, seg);
+        const contexto   = `Meta Ad para "${copy.titulo}" — ${seg.nombre}, audiencia hispana USA, estilo ${copy.tipo}`;
+        assetId = (await generarImagenValidada(promptCopy, contexto)).hash;
+      }
 
       const adset = await MetaConnector.post(`/${adAccount()}/adsets`, {
         name:             adsetNombre,

@@ -117,6 +117,40 @@ export const AnthropicConnector = {
     }
   },
 
+  // Analizar imagen con Claude Vision — retorna { score: 1-10, feedback: string }
+  async analizarImagen(imageUrl, contexto) {
+    const client = await getClient();
+    const msg = await client.messages.create({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 150,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: imageUrl } },
+          {
+            type: 'text',
+            text: `Evalúa esta imagen para un anuncio de Meta Ads.
+Contexto: ${contexto}
+
+Criterios (10 puntos):
+- Relevancia al tema del producto (4 pts)
+- Calidad visual / realismo — NO debe parecer IA (3 pts)
+- Atractivo publicitario para hispanos en USA (3 pts)
+
+Responde SOLO con JSON: {"score": <1-10>, "feedback": "<qué mejorar si score < 8, o 'ok' si es buena>"}`,
+          },
+        ],
+      }],
+    });
+    const raw    = msg.content[0].text.trim();
+    const limpio = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    try { return JSON.parse(limpio); } catch {
+      const match = limpio.match(/\{[\s\S]*\}/);
+      if (match) { try { return JSON.parse(match[0]); } catch {} }
+      return { score: 5, feedback: 'No se pudo evaluar' };
+    }
+  },
+
   // Análisis de campañas → retorna plan estructurado
   // maxTokens=2500 para soportar análisis de 5+ campañas sin truncar
   async analizarCampanas({ datos, resumenConversiones, presupuestoMax, planAnterior = null }) {
