@@ -79,7 +79,7 @@ export async function generarYSubirImagen(prompt) {
   return await descargarYSubir(url);
 }
 
-// ── Prompt de imagen adaptado al tipo de copy ─────────
+// ── Prompt de imagen genérico por tipo de copy (fallback sin producto) ────
 function promptImagenParaCopy(copy, seg) {
   const calidad = 'photorealistic professional advertisement photo, cinematic lighting, 8K ultra-detailed, no text overlay, no watermark, no AI-looking artifacts, no cartoon style, no stock photo cliché';
   const variantes = {
@@ -88,6 +88,34 @@ function promptImagenParaCopy(copy, seg) {
     urgencia:  `${seg.imagenPrompt}, dynamic energetic scene, bold dramatic lighting, momentum and opportunity, action-oriented composition, sense of urgency. ${calidad}`,
   };
   return variantes[copy.tipo] || `${seg.imagenPrompt}. ${calidad}`;
+}
+
+// ── Generar prompt de imagen específico al producto con Claude ─────────────
+async function generarPromptImagenParaProducto(nombreProducto, nicho, tipoCopy) {
+  const estilos = {
+    emocional: 'emotional and aspirational — shows transformation, relief, or life improvement',
+    directo:   'professional and clear — shows the solution or benefit directly',
+    urgencia:  'dynamic and energetic — creates sense of opportunity or urgency',
+  };
+  const estilo = estilos[tipoCopy] || 'professional and appealing';
+
+  const prompt = await AnthropicConnector.completar({
+    model:     'claude-haiku-4-5-20251001',
+    maxTokens: 100,
+    prompt: `Create a DALL-E 3 prompt for a Meta Ads image.
+Product: "${nombreProducto}"
+Niche: ${nicho}
+Visual style: ${estilo}
+
+Rules (mandatory):
+- NO faces looking at camera (uncanny valley)
+- Use hands, objects, environments, over-the-shoulder angles, or silhouettes
+- NO text or logos in the image
+- Photorealistic, cinematic lighting, 8K, not AI-looking
+
+Respond with ONLY the image prompt, no labels or explanation:`,
+  });
+  return prompt.trim();
 }
 
 // ── Generar imagen, validar con Claude Vision (base64), reintentar si calidad baja ──
@@ -167,7 +195,7 @@ async function crearFormulario(segmento, stripeUrl = null) {
 
 // ── CREAR CAMPAÑA COMPLETA ────────────────────────────
 // imagenHash opcional: si se pasa, usa esa imagen en vez de buscar/generar una
-export async function crearCampana(segmento, presupuestoDia, { imagenHash, copies, stripeUrl } = {}) {
+export async function crearCampana(segmento, presupuestoDia, { imagenHash, copies, stripeUrl, nombreProducto, nicho } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
 
@@ -228,11 +256,13 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
     try {
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
 
-      // Imagen única por copy cuando es DALL-E (video/foto se comparte — son assets reales)
+      // Imagen única por copy: específica al producto si está disponible, genérica si no
       let assetId = assetIdFijo;
       if (assetTipo === 'dalle') {
-        const promptCopy = promptImagenParaCopy(copy, seg);
-        const contexto   = `Meta Ad para "${copy.titulo}" — ${seg.nombre}, audiencia hispana USA, estilo ${copy.tipo}`;
+        const promptCopy = nombreProducto
+          ? await generarPromptImagenParaProducto(nombreProducto, nicho || seg.nombre, copy.tipo)
+          : promptImagenParaCopy(copy, seg);
+        const contexto = `Meta Ad para "${copy.titulo}" — ${nombreProducto || seg.nombre}, audiencia hispana USA`;
         assetId = (await generarImagenValidada(promptCopy, contexto)).hash;
       }
 
@@ -291,7 +321,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
 }
 
 // ── CAMPAÑA DE TRÁFICO A URL (para Hotmart / landing page) ──
-export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies } = {}) {
+export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies, nombreProducto, nicho } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
   if (!urlDestino) throw new Error('urlDestino es requerido para campañas de tráfico');
@@ -331,11 +361,13 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
     try {
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
 
-      // Imagen única por copy cuando es DALL-E (video/foto se comparte — son assets reales)
+      // Imagen única por copy: específica al producto si está disponible, genérica si no
       let assetId = assetIdFijo;
       if (assetTipo === 'dalle') {
-        const promptCopy = promptImagenParaCopy(copy, seg);
-        const contexto   = `Meta Ad para "${copy.titulo}" — ${seg.nombre}, audiencia hispana USA, estilo ${copy.tipo}`;
+        const promptCopy = nombreProducto
+          ? await generarPromptImagenParaProducto(nombreProducto, nicho || seg.nombre, copy.tipo)
+          : promptImagenParaCopy(copy, seg);
+        const contexto = `Meta Ad para "${copy.titulo}" — ${nombreProducto || seg.nombre}, audiencia hispana USA`;
         assetId = (await generarImagenValidada(promptCopy, contexto)).hash;
       }
 

@@ -1323,10 +1323,11 @@ export const TOOL_HANDLERS = {
 
     let campaña;
     try {
+      const imgOpts = { copies, nombreProducto: exp.nombre, nicho: exp.nicho || exp.nombre };
       if (stripeInfo?.landing_url) {
-        campaña = await crearCampañaTrafico(segmento, stripeInfo.landing_url, presupuesto, { copies });
+        campaña = await crearCampañaTrafico(segmento, stripeInfo.landing_url, presupuesto, imgOpts);
       } else {
-        campaña = await crearCampana(segmento, presupuesto, { copies });
+        campaña = await crearCampana(segmento, presupuesto, imgOpts);
       }
     } catch (err) {
       return `❌ Meta Ads falló: ${err.message}\nProducto #${exp.id} guardado — intenta de nuevo cuando el token esté listo.`;
@@ -1458,10 +1459,11 @@ export const TOOL_HANDLERS = {
 
       let campaña;
       try {
+        const imgOpts = { copies, nombreProducto: nicho.nombre_producto, nicho: nicho.nicho };
         if (stripeInfo?.landing_url) {
-          campaña = await crearCampañaTrafico(segmento, stripeInfo.landing_url, presupuesto, { copies });
+          campaña = await crearCampañaTrafico(segmento, stripeInfo.landing_url, presupuesto, imgOpts);
         } else {
-          campaña = await crearCampana(segmento, presupuesto, { imagenHash, copies, stripeUrl: null });
+          campaña = await crearCampana(segmento, presupuesto, { imagenHash, ...imgOpts, stripeUrl: null });
         }
       } catch (err) {
         await notif(`❌ <b>Pipeline falló en Paso 5</b> (crear campaña Meta)\n<code>${esc(err.message)}</code>\n\nProducto ya guardado — puedes relanzar solo la campaña.`);
@@ -1982,7 +1984,7 @@ export const TOOL_HANDLERS = {
 
     let campaña;
     try {
-      campaña = await crearCampañaTrafico(segmento, url_destino, presupuestoDia, { copies });
+      campaña = await crearCampañaTrafico(segmento, url_destino, presupuestoDia, { copies, nombreProducto: nombre_producto, nicho });
     } catch (err) {
       await notif(`❌ <b>Test falló al crear campaña</b>\n<code>${esc(err.message)}</code>`);
       return `Error creando test de creativos: ${err.message}`;
