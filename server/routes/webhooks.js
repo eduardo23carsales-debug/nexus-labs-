@@ -28,6 +28,23 @@ import { SystemState }             from '../../config/system-state.js';
 import { ProjectsDB }              from '../../crm/projects.db.js';
 import ENV                         from '../../config/env.js';
 
+// Construye config de Jarvis voz con la fecha real inyectada en el system prompt
+function jarvisVozConfig() {
+  const ahora    = new Date();
+  const fechaHoy = ahora.toLocaleDateString('es', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const horaHoy  = ahora.toLocaleTimeString('es', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
+  const fechaISO = ahora.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const lineaFecha = `FECHA Y HORA ACTUAL (Miami, ET): ${fechaHoy} — ${horaHoy} (${fechaISO}). Usa SIEMPRE esta fecha para "hoy", "mañana", etc.`;
+  const msgOriginal = JARVIS_VOICE_CONFIG.model.messages[0].content;
+  return {
+    ...JARVIS_VOICE_CONFIG,
+    model: {
+      ...JARVIS_VOICE_CONFIG.model,
+      messages: [{ role: 'system', content: `${lineaFecha}\n\n${msgOriginal}` }],
+    },
+  };
+}
+
 const router = Router();
 
 // ── Meta Lead Ads webhook ─────────────────────────────
@@ -81,7 +98,7 @@ router.post('/vapi/jarvis/llamar', async (req, res) => {
     await VapiConnector.iniciarLlamada({
       telefono:        tel,
       nombre:          'Eduardo',
-      assistantConfig: JARVIS_VOICE_CONFIG,
+      assistantConfig: jarvisVozConfig(),
     });
 
     await TelegramConnector.notificar('📞 <b>Jarvis te está llamando...</b> Contesta y dile qué necesitas.');
@@ -278,7 +295,7 @@ async function manejarComando(msg) {
         await VapiConnector.iniciarLlamada({
           telefono:        tel,
           nombre:          'Eduardo',
-          assistantConfig: JARVIS_VOICE_CONFIG,
+          assistantConfig: jarvisVozConfig(),
         });
         await notif('📞 <b>Jarvis en línea</b> — contesta y dile qué necesitas.');
       } catch (err) {
@@ -456,7 +473,7 @@ async function manejarCallback(cbq) {
     try {
       const rawTel = (ENV.WHATSAPP_EDUARDO || '17869167339').replace(/\D/g, '');
       const tel    = rawTel.startsWith('1') && rawTel.length === 11 ? `+${rawTel}` : `+1${rawTel}`;
-      await VapiConnector.iniciarLlamada({ telefono: tel, nombre: 'Eduardo', assistantConfig: JARVIS_VOICE_CONFIG });
+      await VapiConnector.iniciarLlamada({ telefono: tel, nombre: 'Eduardo', assistantConfig: jarvisVozConfig() });
       await TelegramConnector.notificar('📞 <b>Jarvis en línea</b> — contesta y dile qué necesitas.');
     } catch (err) {
       await TelegramConnector.notificar(`⚠️ Jarvis no pudo llamar: ${esc(err.message)}`);

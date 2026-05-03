@@ -156,11 +156,20 @@ export async function procesarMensajeJarvis(texto, chatId) {
     const historial = await ConversationDB.cargar(chatId);
     const messages  = [...historial, { role: 'user', content: texto }];
 
+    // Fecha y hora real del servidor (siempre en hora de Miami)
+    const ahora = new Date();
+    const fechaHoy = ahora.toLocaleDateString('es', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const horaHoy  = ahora.toLocaleTimeString('es', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
+    const fechaISO = ahora.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
+    const contextFecha = `FECHA Y HORA ACTUAL (Miami, ET): ${fechaHoy} — ${horaHoy} (${fechaISO})\nUsa SIEMPRE esta fecha cuando el usuario diga "hoy", "mañana", etc. NUNCA uses fechas de tu entrenamiento.`;
+
     // Inyectar memorias persistentes en el system prompt
     const memorias = await JarvisMemoryDB.getContexto();
-    const systemFinal = memorias
-      ? `${SYSTEM_PROMPT}\n\n═══════════════════════════════════════\nMI MEMORIA PERSISTENTE (lo que sé del negocio)\n═══════════════════════════════════════\n${memorias}`
-      : SYSTEM_PROMPT;
+    const systemFinal = [
+      contextFecha,
+      SYSTEM_PROMPT,
+      memorias ? `═══════════════════════════════════════\nMI MEMORIA PERSISTENTE (lo que sé del negocio)\n═══════════════════════════════════════\n${memorias}` : '',
+    ].filter(Boolean).join('\n\n');
 
     let respuestaFinal = '';
 
