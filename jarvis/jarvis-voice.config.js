@@ -487,6 +487,107 @@ const FUNCIONES_VAPI = [
       required: ['nicho_json'],
     },
   },
+
+  // ── PRODUCTOS (ver y relanzar) ────────────────────────
+  {
+    name:        'ver_producto',
+    description: 'Muestra los links de un producto digital: landing de ventas, URL del producto y Stripe. Úsalo cuando Eduardo diga "muéstrame el producto", "dame el link del curso", "revisa el producto X".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID numérico del experimento' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  {
+    name:        'relanzar_producto',
+    description: 'Busca un producto digital ya creado por nombre o ID y lo publica con Stripe y campaña en Meta Ads. Úsalo cuando Eduardo diga "go a [producto]", "lanza el que ya estaba", "relanza [nombre]".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial del producto o ID numérico del experimento' },
+        presupuesto: { type: 'number', description: 'Presupuesto diario Meta Ads en USD. Default: 10' },
+        segmento:    { type: 'string', description: 'Segmento Meta Ads. Default: emprendedor-principiante' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  // ── CALENDARIO ───────────────────────────────────────
+  {
+    name:        'agendar_en_calendario',
+    description: 'Agrega un evento al Google Calendar de Eduardo. Úsalo cuando diga "agrégalo al calendario", "ponlo en mi agenda", "anota esa cita".',
+    parameters: {
+      type: 'object',
+      properties: {
+        titulo:       { type: 'string', description: 'Título del evento' },
+        descripcion:  { type: 'string', description: 'Detalles: quién, qué, contacto, notas' },
+        fecha:        { type: 'string', description: 'Fecha y hora en lenguaje natural: "mañana a las 3pm", "el viernes a las 10am"' },
+        duracion_min: { type: 'number', description: 'Duración en minutos. Default: 60' },
+      },
+      required: ['titulo', 'fecha'],
+    },
+  },
+
+  // ── MEMORIA PERSISTENTE ──────────────────────────────
+  {
+    name:        'recordar',
+    description: 'Guarda algo importante en la memoria persistente de Jarvis. Úsalo cuando Eduardo diga "recuerda que...", "guarda que...", o cuando aprendes algo relevante del negocio.',
+    parameters: {
+      type: 'object',
+      properties: {
+        titulo:      { type: 'string', description: 'Título corto descriptivo' },
+        contenido:   { type: 'string', description: 'Detalle completo de lo que se recuerda' },
+        tipo:        { type: 'string', enum: ['hecho', 'preferencia', 'instruccion', 'objetivo', 'aprendizaje', 'proyecto', 'cliente', 'alerta'], description: 'Categoría de la memoria' },
+        importancia: { type: 'number', description: 'Del 1 al 10. Default: 5' },
+      },
+      required: ['titulo', 'contenido'],
+    },
+  },
+
+  {
+    name:        'ver_memoria',
+    description: 'Muestra todas las memorias activas de Jarvis. Úsalo cuando Eduardo pregunta qué recuerdas, o antes de tomar decisiones importantes.',
+    parameters:  { type: 'object', properties: {} },
+  },
+
+  {
+    name:        'olvidar',
+    description: 'Desactiva una memoria por su ID. Úsalo cuando Eduardo dice "olvida eso" o quiere corregir algo que Jarvis recordó mal. Primero usa ver_memoria para obtener el ID.',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'ID de la memoria a desactivar (obtenerlo con ver_memoria)' },
+      },
+      required: ['id'],
+    },
+  },
+
+  // ── CONFIGURACIÓN DEL SISTEMA ────────────────────────
+  {
+    name:        'ver_configuracion',
+    description: 'Muestra los límites actuales del sistema: presupuesto máximo diario, CPL objetivo, límites de escalado. Úsalo cuando Eduardo pregunta "cuánto es el límite" o "qué configuración tienes".',
+    parameters:  { type: 'object', properties: {} },
+  },
+
+  {
+    name:        'actualizar_configuracion',
+    description: 'Cambia un límite del sistema. Úsalo cuando Eduardo dice "sube el límite a X", "cambia el CPL objetivo a Y", "pon el máximo en Z". Claves: presupuesto_max_dia, limite_escalar_solo, limite_gasto_sin_lead, max_escalar_pct, cpl_objetivo.',
+    parameters: {
+      type: 'object',
+      properties: {
+        clave: {
+          type: 'string',
+          description: 'Parámetro a cambiar',
+          enum: ['presupuesto_max_dia', 'limite_escalar_solo', 'limite_gasto_sin_lead', 'max_escalar_pct', 'cpl_objetivo'],
+        },
+        valor: { type: 'number', description: 'Nuevo valor numérico' },
+      },
+      required: ['clave', 'valor'],
+    },
+  },
 ];
 
 // ── Config completa de VAPI ───────────────────────────
