@@ -728,6 +728,82 @@ Ejemplos:
   },
 ];
 
+// ── Parser de fechas en español ────────────────────────
+// Convierte texto libre como "mañana a las 3pm" o "el viernes a las 10am" a Date
+function parsearFechaEspanol(texto) {
+  if (!texto) return null;
+  const txt  = texto.toLowerCase().trim();
+  const ahora = new Date();
+  let fecha  = new Date(ahora);
+
+  // Intentar ISO directo primero: "2026-05-10 15:00" o "2026-05-10T15:00"
+  const isoMatch = texto.match(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/);
+  if (isoMatch) {
+    const d = new Date(isoMatch[0].replace(' ', 'T'));
+    if (!isNaN(d)) return d;
+  }
+
+  // Días relativos
+  if (txt.includes('pasado mañana') || txt.includes('pasado manana')) {
+    fecha.setDate(ahora.getDate() + 2);
+  } else if (txt.includes('mañana') || txt.includes('manana')) {
+    fecha.setDate(ahora.getDate() + 1);
+  } else if (txt.includes('hoy')) {
+    // sin cambio de día
+  } else {
+    // Días de la semana
+    const diasMap = {
+      lunes: 1, martes: 2, 'miércoles': 3, miercoles: 3,
+      jueves: 4, viernes: 5, 'sábado': 6, sabado: 6, domingo: 0,
+    };
+    let hallado = false;
+    for (const [nombre, numDia] of Object.entries(diasMap)) {
+      if (txt.includes(nombre)) {
+        const hoy  = ahora.getDay();
+        let diff   = numDia - hoy;
+        if (diff <= 0) diff += 7;
+        fecha.setDate(ahora.getDate() + diff);
+        hallado = true;
+        break;
+      }
+    }
+    // Mes + número: "mayo 10", "el 10 de mayo"
+    if (!hallado) {
+      const meses = {
+        enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+        julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11,
+      };
+      for (const [nombre, numMes] of Object.entries(meses)) {
+        if (txt.includes(nombre)) {
+          const mDia = txt.match(/\b(\d{1,2})\b/);
+          if (mDia) {
+            fecha.setMonth(numMes, parseInt(mDia[1]));
+            if (fecha < ahora) fecha.setFullYear(ahora.getFullYear() + 1);
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  // Hora: "a las 3pm", "a las 10am", "3:30pm", "15:00"
+  const mHora = txt.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la tarde|tarde|de la noche|noche|de la mañana)?/);
+  if (mHora) {
+    let h   = parseInt(mHora[1]);
+    const m = parseInt(mHora[2] || '0');
+    const p = mHora[3] || '';
+    if ((p.includes('pm') || p.includes('tarde') || p.includes('noche')) && h < 12) h += 12;
+    if (p.includes('am') && h === 12) h = 0;
+    // Sin indicador AM/PM: horas <= 7 se asumen PM (nadie agenda a las 2am)
+    if (!p && h >= 1 && h <= 7) h += 12;
+    fecha.setHours(h, m, 0, 0);
+  } else {
+    fecha.setHours(10, 0, 0, 0); // default 10am
+  }
+
+  return isNaN(fecha) ? null : fecha;
+}
+
 // ── Implementaciones ───────────────────────────────────
 export const TOOL_HANDLERS = {
 
@@ -1806,23 +1882,10 @@ export const TOOL_HANDLERS = {
     return `✅ <b>${clave}</b> actualizado: ${anterior} → <b>${valor}</b>\nEl cambio aplica de inmediato — sin necesidad de redesplegar.`;
   },
 
-  async agendar_en_calendario({ titulo, fecha, hora, duracion_min = 60, descripcion = '' }) {
+  async agendar_en_calendario({ titulo, fecha, duracion_min = 60, descripcion = '' }) {
     try {
-      // Construir inicio como ISO string desde fecha + hora en texto libre
-      let inicio;
-      const ahora = new Date();
-
-      // Intentar parsear fecha + hora directamente
-      const textoCompleto = `${fecha} ${hora}`.trim();
-      const intentoDirecto = new Date(textoCompleto);
-
-      if (!isNaN(intentoDirecto)) {
-        inicio = intentoDirecto.toISOString();
-      } else {
-        // Fallback: usar utilidad del GoogleCalendarConnector si tiene parseDate,
-        // o simplemente reportar que no se pudo parsear con claridad
-        return `⚠️ No pude entender la fecha "${fecha} ${hora}". Por favor usa formato como "2026-05-10 15:00" o "mayo 10 a las 3pm".`;
-      }
+      const inicio = parsearFechaEspanol(fecha);
+      if (!inicio) return `⚠️ No pude entender la fecha "${fecha}". Intenta con algo como "mañana a las 3pm" o "el viernes a las 10am".`;
 
       const resultado = await GoogleCalendarConnector.crearEventoPersonalizado({
         titulo,
@@ -1831,7 +1894,11 @@ export const TOOL_HANDLERS = {
         duracion_min,
       });
 
-      return `📅 Evento agregado al calendario: <b>${titulo}</b>\n🕐 ${fecha} ${hora} (${duracion_min} min)\n🔗 ${resultado?.htmlLink || 'Ver en Google Calendar'}`;
+      if (!resultado) return `⚠️ Google Calendar no está configurado. Verifica GOOGLE_SERVICE_ACCOUNT_JSON en Railway.`;
+
+      const horaStr = inicio.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' });
+      const fechaStr = inicio.toLocaleDateString('es', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+      return `📅 Evento agendado: <b>${titulo}</b>\n🕐 ${fechaStr} a las ${horaStr} (${duracion_min} min)\n🔗 ${resultado.url || 'Ver en Google Calendar'}`;
     } catch (e) {
       return `❌ Error agendando evento: ${e.message}`;
     }
