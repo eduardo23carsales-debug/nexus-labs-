@@ -794,8 +794,12 @@ function parsearFechaEspanol(texto) {
     const p = mHora[3] || '';
     if ((p.includes('pm') || p.includes('tarde') || p.includes('noche')) && h < 12) h += 12;
     if (p.includes('am') && h === 12) h = 0;
-    // Sin indicador AM/PM: horas <= 7 se asumen PM (nadie agenda a las 2am)
-    if (!p && h >= 1 && h <= 7) h += 12;
+    if (!p && h < 12) {
+      // Sin AM/PM: horas 1-5 siempre PM (nadie agenda 1am-5am)
+      // Horas 6-11: si estamos en la tarde/noche, asumir PM
+      if (h >= 1 && h <= 5) h += 12;
+      else if (h >= 6 && ahora.getHours() >= 12) h += 12;
+    }
     fecha.setHours(h, m, 0, 0);
   } else {
     fecha.setHours(10, 0, 0, 0); // default 10am
