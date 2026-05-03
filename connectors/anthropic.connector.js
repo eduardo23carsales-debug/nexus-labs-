@@ -117,16 +117,17 @@ export const AnthropicConnector = {
     }
   },
 
-  // Analizar imagen con Claude Vision — retorna { score: 1-10, feedback: string }
-  async analizarImagen(imageUrl, contexto) {
+  // Analizar imagen con Claude Vision — imageBase64: Buffer o string base64, retorna { score: 1-10, feedback: string }
+  async analizarImagen(imageBase64, contexto) {
     const client = await getClient();
+    const b64    = Buffer.isBuffer(imageBase64) ? imageBase64.toString('base64') : imageBase64;
     const msg = await client.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 150,
       messages: [{
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'url', url: imageUrl } },
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
           {
             type: 'text',
             text: `Evalúa esta imagen para un anuncio de Meta Ads.

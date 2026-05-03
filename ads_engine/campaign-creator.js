@@ -90,19 +90,30 @@ function promptImagenParaCopy(copy, seg) {
   return variantes[copy.tipo] || `${seg.imagenPrompt}. ${calidad}`;
 }
 
-// ── Generar imagen, validar con Claude Vision, reintentar si calidad baja ──
+// ── Generar imagen, validar con Claude Vision (base64), reintentar si calidad baja ──
 async function generarImagenValidada(promptBase, contexto, maxIntentos = 3) {
-  let prompt    = promptBase;
+  let prompt   = promptBase;
+  let ultimaBuf = null;
   let ultimaUrl = null;
 
   for (let intento = 1; intento <= maxIntentos; intento++) {
-    const url = await OpenAIConnector.generarImagen({ prompt });
+    const url  = await OpenAIConnector.generarImagen({ prompt });
+    const resp = await axios.get(url, { responseType: 'arraybuffer' });
+    const buf  = Buffer.from(resp.data);
+    ultimaBuf  = buf;
     ultimaUrl  = url;
 
-    const val = await AnthropicConnector.analizarImagen(url, contexto);
+    // Pasar como base64 — las URLs de DALL-E no son accesibles desde la API de Claude
+    const val = await AnthropicConnector.analizarImagen(buf, contexto);
     console.log(`[AdsEngine] Imagen intento ${intento}/${maxIntentos} — score ${val.score}/10: ${val.feedback}`);
 
-    if (val.score >= 7) return await descargarYSubir(url);
+    if (val.score >= 7) {
+      const tmp = path.join('/tmp', `dalleimg_${Date.now()}.jpg`);
+      fs.writeFileSync(tmp, buf);
+      const hash = await subirFotoLocal(tmp);
+      fs.unlinkSync(tmp);
+      return { hash, url };
+    }
 
     if (intento < maxIntentos) {
       prompt = `${promptBase}. Improve: ${val.feedback}. Must look 100% photorealistic, not AI-generated.`;
@@ -110,7 +121,11 @@ async function generarImagenValidada(promptBase, contexto, maxIntentos = 3) {
   }
 
   console.log(`[AdsEngine] Score insuficiente tras ${maxIntentos} intentos — usando última imagen`);
-  return await descargarYSubir(ultimaUrl);
+  const tmp = path.join('/tmp', `dalleimg_${Date.now()}.jpg`);
+  fs.writeFileSync(tmp, ultimaBuf);
+  const hash = await subirFotoLocal(tmp);
+  fs.unlinkSync(tmp);
+  return { hash, url: ultimaUrl };
 }
 
 // ── Generar copies específicos del producto con Claude ──
