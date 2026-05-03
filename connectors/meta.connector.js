@@ -11,6 +11,12 @@ const API_BASE = 'https://graph.facebook.com/v25.0';
 // Token dinámico — se lee en cada llamada para no caducar en memoria
 const token = () => ENV.META_TOKEN;
 
+// Ad account siempre con prefijo act_ requerido por Meta API
+export const adAccount = () => {
+  const id = ENV.META_AD_ACCOUNT || '';
+  return id.startsWith('act_') ? id : `act_${id}`;
+};
+
 export const MetaConnector = {
 
   async get(endpoint, params = {}) {
@@ -62,7 +68,7 @@ export const MetaConnector = {
   // Obtener campañas activas de la cuenta
   async getCampanas(soloActivas = false) {
     const filter = soloActivas ? '&effective_status=["ACTIVE"]' : '';
-    const data = await this.get(`/${ENV.META_AD_ACCOUNT}/campaigns`, {
+    const data = await this.get(`/${adAccount()}/campaigns`, {
       fields:        'id,name,status,effective_status,daily_budget,lifetime_budget',
       limit:         50,
     });

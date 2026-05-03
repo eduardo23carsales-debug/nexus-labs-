@@ -7,7 +7,7 @@ import axios      from 'axios';
 import FormData   from 'form-data';
 import fs         from 'fs';
 import path       from 'path';
-import { MetaConnector }      from '../connectors/meta.connector.js';
+import { MetaConnector, adAccount } from '../connectors/meta.connector.js';
 import { OpenAIConnector }    from '../connectors/openai.connector.js';
 import { AnthropicConnector } from '../connectors/anthropic.connector.js';
 import { SEGMENTOS }          from './segments.config.js';
@@ -42,7 +42,7 @@ function buscarFoto(segmento) {
 async function subirFotoLocal(filePath) {
   const form = new FormData();
   form.append('filename', fs.createReadStream(filePath));
-  const data = await MetaConnector.postForm(`/${ENV.META_AD_ACCOUNT}/adimages`, form);
+  const data = await MetaConnector.postForm(`/${adAccount()}/adimages`, form);
   const hash = Object.values(data.images || {})[0]?.hash;
   if (!hash) throw new Error('Meta no retornó hash de imagen');
   return hash;
@@ -54,7 +54,7 @@ async function subirVideoLocal(filePath) {
   form.append('source', fs.createReadStream(filePath));
   form.append('access_token', ENV.META_TOKEN);
   const { data } = await axios.post(
-    `https://graph-video.facebook.com/v25.0/${ENV.META_AD_ACCOUNT}/advideos`,
+    `https://graph-video.facebook.com/v25.0/${adAccount()}/advideos`,
     form,
     { headers: form.getHeaders(), timeout: 120000 }
   );
@@ -119,7 +119,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
 
   // Verificar ad account antes de crear
   try {
-    const acct = await MetaConnector.get(`/${ENV.META_AD_ACCOUNT}`, {
+    const acct = await MetaConnector.get(`/${adAccount()}`, {
       fields: 'id,name,account_status,disable_reason,currency',
     });
     const STATUS = { 1: 'ACTIVA', 2: 'DESHABILITADA', 3: 'SIN_PAGO', 7: 'SIN_PAGO', 9: 'PENDIENTE_REVISION' };
@@ -137,7 +137,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
   const nombre = `Nexus Labs —${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
 
   // 1. Campaña — presupuesto + bid_strategy a nivel campaña (requerido con CBO en API v25)
-  const campana = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/campaigns`, {
+  const campana = await MetaConnector.post(`/${adAccount()}/campaigns`, {
     name:                  nombre,
     objective:             'OUTCOME_LEADS',
     status:                'ACTIVE',
@@ -176,7 +176,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
 
       // AdSet — sin budget ni bid_strategy (ambos viven en la campaña con CBO)
-      const adset = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/adsets`, {
+      const adset = await MetaConnector.post(`/${adAccount()}/adsets`, {
         name:              adsetNombre,
         campaign_id:       campana.id,
         status:            'ACTIVE',
@@ -192,13 +192,13 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
         ? { video_data: { video_id: assetId, title: copy.titulo, message: copy.cuerpo, call_to_action: { type: 'LEARN_MORE', value: { lead_gen_form_id: formularioId } } } }
         : { link_data:  { image_hash: assetId, message: copy.cuerpo, name: copy.titulo, link: `https://${ENV.RAILWAY_DOMAIN || 'nexuslabs.com'}`, call_to_action: { type: 'LEARN_MORE', value: { lead_gen_form_id: formularioId } } } };
 
-      const creative = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/adcreatives`, {
+      const creative = await MetaConnector.post(`/${adAccount()}/adcreatives`, {
         name:        `Creative — ${adsetNombre}`,
         object_story_spec: { page_id: ENV.META_PAGE_ID, ...creative_spec },
       });
 
       // Ad
-      const ad = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/ads`, {
+      const ad = await MetaConnector.post(`/${adAccount()}/ads`, {
         name:        `Ad — ${adsetNombre}`,
         adset_id:    adset.id,
         creative:    { creative_id: creative.id },
@@ -239,7 +239,7 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
   const nombre = `Nexus Labs — ${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
 
   // 1. Campaña de tráfico — presupuesto + bid_strategy a nivel campaña (CBO)
-  const campana = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/campaigns`, {
+  const campana = await MetaConnector.post(`/${adAccount()}/campaigns`, {
     name:                  nombre,
     objective:             'OUTCOME_TRAFFIC',
     status:                'ACTIVE',
@@ -271,7 +271,7 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
     try {
       const adsetNombre = `${seg.nombre} — ${copy.tipo} — ${ts}`;
 
-      const adset = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/adsets`, {
+      const adset = await MetaConnector.post(`/${adAccount()}/adsets`, {
         name:             adsetNombre,
         campaign_id:      campana.id,
         status:           'ACTIVE',
@@ -287,12 +287,12 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
             link: urlDestino,
             call_to_action: { type: 'LEARN_MORE', value: { link: urlDestino } } } };
 
-      const creative = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/adcreatives`, {
+      const creative = await MetaConnector.post(`/${adAccount()}/adcreatives`, {
         name:              `Creative — ${adsetNombre}`,
         object_story_spec: { page_id: ENV.META_PAGE_ID, ...creative_spec },
       });
 
-      const ad = await MetaConnector.post(`/${ENV.META_AD_ACCOUNT}/ads`, {
+      const ad = await MetaConnector.post(`/${adAccount()}/ads`, {
         name:     `Ad — ${adsetNombre}`,
         adset_id: adset.id,
         creative: { creative_id: creative.id },
