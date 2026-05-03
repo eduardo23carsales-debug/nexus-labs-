@@ -726,6 +726,42 @@ Ejemplos:
       required: ['id'],
     },
   },
+
+  // ── TEST DE CREATIVOS ─────────────────────────────
+  {
+    name: 'test_creativos',
+    description: `Lanza un test A/B barato para descubrir qué copy convierte mejor ANTES de invertir en serio.
+Crea UNA campaña con 3 ad sets — cada uno usa un copy diferente (emocional, directo, urgencia).
+Meta distribuye el presupuesto y en 3-7 días sabes cuál ganó.
+Úsalo cuando Eduardo diga "prueba qué funciona mejor", "testea creativos", "quiero probar antes de escalar", "qué copy funciona para X", etc.
+El analista reportará el ganador automáticamente. Ideal antes de lanzar con presupuesto grande.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        segmento:         { type: 'string', description: 'Segmento Meta: emprendedor-principiante, emprendedor-escalar, afiliado-hotmart, infoproductor, oferta-especial' },
+        url_destino:      { type: 'string', description: 'URL de la landing page o link de Stripe donde va el tráfico' },
+        nombre_producto:  { type: 'string', description: 'Nombre del producto (para generar copies relevantes con IA)' },
+        nicho:            { type: 'string', description: 'Nicho o tema del producto (ej: "marketing digital", "fitness latinos", "IRS deudas")' },
+        precio:           { type: 'number', description: 'Precio del producto en USD. Para hacer copies más específicos.' },
+        presupuesto:      { type: 'number', description: 'Presupuesto diario total del test en USD. Se reparte en 3 ad sets. Default: 15 ($5/ad set/día)' },
+      },
+      required: ['segmento', 'url_destino'],
+    },
+  },
+
+  // ── P&L REPORT ────────────────────────────────────
+  {
+    name: 'ver_pnl',
+    description: `Muestra el P&L (ganancias y pérdidas) real del negocio: cuánto se gastó en Meta Ads, cuánto se ganó con Stripe y Hotmart, y cuál es la ganancia neta.
+Incluye desglose por producto y ROI de cada campaña.
+Úsalo cuando Eduardo diga "¿cuánto hemos ganado?", "¿cuánto hemos gastado?", "dame el P&L", "¿estamos ganando dinero?", "¿cuál es el ROI?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        dias: { type: 'number', description: 'Días hacia atrás para el reporte. Default: 7' },
+      },
+    },
+  },
 ];
 
 // ── Parser de fechas en español ────────────────────────
@@ -1916,6 +1952,124 @@ export const TOOL_HANDLERS = {
     } catch (e) {
       return `❌ Error agendando evento: ${e.message}`;
     }
+  },
+
+  // ── TEST DE CREATIVOS ───────────────────────────────
+  async test_creativos({ segmento, url_destino, nombre_producto = '', nicho = '', precio = 47, presupuesto = 15 }) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    if (!segmento || !url_destino) return 'Necesito segmento y url_destino para crear el test.';
+
+    const presupuestoDia = Math.max(9, presupuesto);
+
+    await notif(
+      `🧪 <b>Test de creativos iniciado</b>\n` +
+      `🎯 ${segmento} → ${url_destino}\n` +
+      `💰 $${presupuestoDia}/día — 3 ad sets (copies: emocional, directo, urgencia)\n` +
+      `⏳ Generando copies con IA...`
+    );
+
+    // Generar 3 copies específicos del producto si se dan los datos
+    let copies = null;
+    if (nombre_producto || nicho) {
+      try {
+        copies = await generarCopiesParaProducto(nombre_producto || nicho, nicho || nombre_producto, precio);
+        if (!Array.isArray(copies) || !copies.length) copies = null;
+      } catch (err) {
+        console.warn('[TestCreativos] Copies IA fallaron, usando copies genéricos del segmento:', err.message);
+      }
+    }
+
+    let campaña;
+    try {
+      campaña = await crearCampañaTrafico(segmento, url_destino, presupuestoDia, { copies });
+    } catch (err) {
+      await notif(`❌ <b>Test falló al crear campaña</b>\n<code>${esc(err.message)}</code>`);
+      return `Error creando test de creativos: ${err.message}`;
+    }
+
+    const adSetsCreados = campaña.ads?.length || 0;
+
+    await notif(
+      `✅ <b>Test A/B lanzado</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📊 Campaña: ${campaña.nombre}\n` +
+      `🎯 ${adSetsCreados} ad sets activos (uno por copy)\n` +
+      `💰 $${presupuestoDia}/día total\n` +
+      `⏰ En 3-7 días el analista reporta el ganador\n\n` +
+      `Cuando quieras ver cuál está ganando, dile a Jarvis "¿cuál va ganando el test?" y miro las métricas de la campaña ${campaña.campaign_id}.`
+    );
+
+    return `Test A/B lanzado. Campaña ID: ${campaña.campaign_id} | ${adSetsCreados} ad sets | $${presupuestoDia}/día. El analista reportará el ganador en 3-7 días.`;
+  },
+
+  // ── P&L REPORT ─────────────────────────────────────
+  async ver_pnl({ dias = 7 } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    // Stripe revenue
+    let stripeRevenue = 0, stripeVentas = 0;
+    if (StripeConnector.disponible()) {
+      try {
+        const stripe = await StripeConnector.getVentasRecientes(null, dias);
+        stripeRevenue = stripe.revenue || 0;
+        stripeVentas  = stripe.total_ventas || 0;
+      } catch (err) {
+        console.warn('[PnL] Stripe error:', err.message);
+      }
+    }
+
+    // Meta spend (campañas activas)
+    let metaSpend = 0;
+    let campanasMeta = [];
+    try {
+      campanasMeta = await MetaConnector.getCampanas();
+      for (const c of campanasMeta) {
+        const datos = await CampaignManager.getDatosCampana(c).catch(() => null);
+        if (datos?.spend) metaSpend += parseFloat(datos.spend) || 0;
+      }
+    } catch (err) {
+      console.warn('[PnL] Meta spend error:', err.message);
+    }
+
+    // Productos por revenue (experiments)
+    const experimentos = await ExperimentsDB.listar('activo').catch(() => []);
+    const productosConVentas = experimentos
+      .filter(e => e.metricas?.ventas > 0)
+      .sort((a, b) => (b.metricas?.revenue || 0) - (a.metricas?.revenue || 0));
+
+    const gananciaNetaEstimada = stripeRevenue - metaSpend;
+    const roi = metaSpend > 0 ? ((stripeRevenue / metaSpend - 1) * 100).toFixed(0) : '∞';
+
+    const lineas = [
+      `💰 <b>P&L — Últimos ${dias} días</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      `📈 <b>Ingresos Stripe:</b>  $${stripeRevenue.toFixed(2)} (${stripeVentas} ventas)`,
+      `📉 <b>Gasto Meta Ads:</b>   $${metaSpend.toFixed(2)}`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      gananciaNetaEstimada >= 0
+        ? `✅ <b>Ganancia neta:</b>    $${gananciaNetaEstimada.toFixed(2)} (ROI: ${roi}%)`
+        : `🔴 <b>Pérdida neta:</b>    $${Math.abs(gananciaNetaEstimada).toFixed(2)}`,
+    ];
+
+    if (productosConVentas.length) {
+      lineas.push(`\n📦 <b>Por producto:</b>`);
+      productosConVentas.slice(0, 5).forEach(e => {
+        lineas.push(`• ${e.nombre} — ${e.metricas.ventas} ventas | $${e.metricas.revenue || 0}`);
+      });
+    }
+
+    if (campanasMeta.length) {
+      lineas.push(`\n📊 <b>Campañas activas:</b> ${campanasMeta.length}`);
+    }
+
+    if (stripeRevenue === 0 && metaSpend === 0) {
+      lineas.push(`\n⚠️ Sin datos todavía. Lanza un producto con pipeline_completo para ver tu primer P&L.`);
+    }
+
+    const mensaje = lineas.join('\n');
+    await notif(mensaje);
+    return mensaje.replace(/<[^>]+>/g, '');
   },
 };
 

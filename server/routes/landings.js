@@ -1,14 +1,11 @@
 // ════════════════════════════════════════════════════
-// ROUTES — Landing pages y webhook de Stripe
+// ROUTES — Landing pages (ventas + acceso a producto)
+// El webhook de Stripe está en server/routes/webhooks.js
 // ════════════════════════════════════════════════════
 
-import { Router }            from 'express';
-import { query }             from '../../config/database.js';
-import { StripeConnector }   from '../../connectors/stripe.connector.js';
-import { ResendConnector }   from '../../connectors/resend.connector.js';
-import { TelegramConnector } from '../../connectors/telegram.connector.js';
-import ENV                   from '../../config/env.js';
-import axios                 from 'axios';
+import { Router } from 'express';
+import { query }  from '../../config/database.js';
+import ENV        from '../../config/env.js';
 
 const router = Router();
 
@@ -69,67 +66,6 @@ router.get('/acceso/:slug', async (req, res) => {
   } catch (err) {
     console.error('[Landings] Error sirviendo producto:', err.message);
     res.status(500).send('Error interno.');
-  }
-});
-
-// ── Stripe webhook — entrega inmediata al pagar ───
-router.post('/stripe/webhook', async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-
-  let event;
-  try {
-    event = await StripeConnector.construirEvento(req.body, sig);
-  } catch (err) {
-    console.error('[Stripe Webhook] Firma inválida:', err.message);
-    return res.status(400).send(`Webhook error: ${err.message}`);
-  }
-
-  res.status(200).json({ received: true });
-
-  if (event.type === 'checkout.session.completed') {
-    console.log('[Stripe Webhook] Pago confirmado — procesando entrega...');
-
-    ResendConnector.procesarPagosNuevos().catch(err =>
-      console.error('[Stripe Webhook] Error en entrega:', err.message)
-    );
-
-    // Meta Conversions API — evento Purchase server-side
-    const session = event.data.object;
-    const amount  = (session.amount_total || 0) / 100;
-    if (ENV.META_PIXEL_ID && ENV.META_TOKEN) {
-      try {
-        const crypto      = await import('crypto');
-        const emailRaw    = session.customer_details?.email || '';
-        const hashedEmail = emailRaw
-          ? crypto.default.createHash('sha256').update(emailRaw.trim().toLowerCase()).digest('hex')
-          : null;
-
-        await axios.post(
-          `https://graph.facebook.com/v25.0/${ENV.META_PIXEL_ID}/events?access_token=${ENV.META_TOKEN}`,
-          {
-            data: [{
-              event_name:   'Purchase',
-              event_time:   Math.floor(Date.now() / 1000),
-              action_source: 'website',
-              user_data:    { ...(hashedEmail && { em: [hashedEmail] }) },
-              custom_data:  { currency: 'USD', value: amount },
-            }]
-          },
-          { timeout: 8000 }
-        );
-        console.log(`[Stripe Webhook] Meta Purchase enviado — $${amount}`);
-      } catch (pixelErr) {
-        console.warn('[Stripe Webhook] Meta CAPI falló (no crítico):', pixelErr.message);
-      }
-    }
-
-    // Notificar a Eduardo
-    TelegramConnector.notificar(
-      `💰 <b>Nueva venta Stripe</b>\n` +
-      `💵 $${amount}\n` +
-      `📧 ${session.customer_details?.email || 'sin email'}\n` +
-      `👤 ${session.customer_details?.name || 'desconocido'}`
-    ).catch(() => {});
   }
 });
 

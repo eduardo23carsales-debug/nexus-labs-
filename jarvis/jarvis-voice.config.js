@@ -588,6 +588,35 @@ const FUNCIONES_VAPI = [
       required: ['clave', 'valor'],
     },
   },
+
+  // ── TEST DE CREATIVOS ──────────────────────────────
+  {
+    name:        'test_creativos',
+    description: 'Lanza un test A/B barato con 3 copies diferentes para descubrir cuál convierte mejor antes de escalar. Úsalo cuando Eduardo dice "prueba qué funciona mejor", "testea creativos", "quiero probar antes de invertir".',
+    parameters: {
+      type: 'object',
+      properties: {
+        segmento:        { type: 'string', description: 'Segmento Meta Ads: emprendedor-principiante, afiliado-hotmart, etc.' },
+        url_destino:     { type: 'string', description: 'URL de la landing page o link de Stripe' },
+        nombre_producto: { type: 'string', description: 'Nombre del producto para copies relevantes' },
+        nicho:           { type: 'string', description: 'Nicho o tema del producto' },
+        presupuesto:     { type: 'number', description: 'Presupuesto total del test en USD. Default: 15' },
+      },
+      required: ['segmento', 'url_destino'],
+    },
+  },
+
+  // ── P&L REPORT ────────────────────────────────────
+  {
+    name:        'ver_pnl',
+    description: 'Muestra el P&L real: ingresos Stripe, gasto Meta Ads y ganancia neta. Úsalo cuando Eduardo dice "¿cuánto hemos ganado?", "dame el P&L", "¿cuánto hemos gastado?", "¿estamos ganando dinero?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        dias: { type: 'number', description: 'Días hacia atrás para el reporte. Default: 7' },
+      },
+    },
+  },
 ];
 
 // ── Config completa de VAPI ───────────────────────────

@@ -261,7 +261,7 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
     assetId   = await subirFotoLocal(fotoPath);
   } else {
     assetTipo = 'dalle';
-    assetId   = await generarYSubirImagen(seg.imagenPrompt);
+    assetId   = (await generarYSubirImagen(seg.imagenPrompt)).hash;
   }
 
   // 3. AdSets + Creativos + Ads — usa copies específicos del producto si se pasan
