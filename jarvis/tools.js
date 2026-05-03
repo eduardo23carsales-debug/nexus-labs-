@@ -733,14 +733,22 @@ Ejemplos:
 function parsearFechaEspanol(texto) {
   if (!texto) return null;
   const txt  = texto.toLowerCase().trim();
-  const ahora = new Date();
-  let fecha  = new Date(ahora);
+  // Usar siempre hora de Miami (America/New_York) — el servidor Railway corre en UTC
+  const ahoraET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const ahora   = ahoraET;
+  let fecha     = new Date(ahoraET);
 
-  // Intentar ISO directo primero: "2026-05-10 15:00" o "2026-05-10T15:00"
+  // ISO directo: "2026-05-10 15:00" o "2026-05-10T15:00"
   const isoMatch = texto.match(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/);
   if (isoMatch) {
     const d = new Date(isoMatch[0].replace(' ', 'T'));
     if (!isNaN(d)) return d;
+  }
+
+  // Formato US MM/DD/YYYY o M/D/YYYY — Eduardo está en Miami, usa formato americano
+  const usMatch = texto.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (usMatch) {
+    fecha.setFullYear(parseInt(usMatch[3]), parseInt(usMatch[1]) - 1, parseInt(usMatch[2]));
   }
 
   // Días relativos
