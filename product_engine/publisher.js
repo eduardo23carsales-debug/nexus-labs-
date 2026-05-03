@@ -236,7 +236,6 @@ Responde EXACTAMENTE con este JSON (sin markdown):
   }
 
   // Inyectar countdown 48h + evento InitiateCheckout
-  const productoKey = nicho.nombre_producto.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30);
   const script = `<script>(function(){var key='nexus_offer_${productoKey}';var end=parseInt(localStorage.getItem(key)||'0');if(!end||end<Date.now()){end=Date.now()+48*3600000;localStorage.setItem(key,end);}function pad(n){return n<10?'0'+n:String(n);}function tick(){var diff=Math.max(0,end-Date.now());var h=Math.floor(diff/3600000);var m=Math.floor((diff%3600000)/60000);var s=Math.floor((diff%60000)/1000);var txt=pad(h)+':'+pad(m)+':'+pad(s);['nexus-countdown','nexus-countdown-2','nexus-countdown-3'].forEach(function(id){var el=document.getElementById(id);if(el)el.textContent=txt;});if(diff>0)setTimeout(tick,1000);}tick();document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.nexus-cta-btn').forEach(function(btn){btn.addEventListener('click',function(){if(typeof fbq!=='undefined'){fbq('track','InitiateCheckout',{value:${nicho.precio},currency:'USD',content_name:'${nicho.nombre_producto.replace(/'/g, "\\'")}'});}});});});}());</script>`;
 
   html = html.replace('</body>', script + '\n</body>');
