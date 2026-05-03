@@ -730,13 +730,14 @@ Ejemplos:
 
 // ── Parser de fechas en español ────────────────────────
 // Convierte texto libre como "mañana a las 3pm" o "el viernes a las 10am" a Date
+// Devuelve un Date cuyas partes getHours/getDate/etc. representan hora ET (Miami)
+// aunque el proceso corra en UTC — Google Calendar lo recibe sin el "Z" de UTC
 function parsearFechaEspanol(texto) {
   if (!texto) return null;
   const txt  = texto.toLowerCase().trim();
-  // Usar siempre hora de Miami (America/New_York) — el servidor Railway corre en UTC
-  const ahoraET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const ahora   = ahoraET;
-  let fecha     = new Date(ahoraET);
+  // ET = UTC-4 (EDT verano) — Miami. Sin depender de Intl que puede fallar en Railway
+  const ahora = new Date(Date.now() - 4 * 60 * 60 * 1000);
+  let fecha   = new Date(ahora);
 
   // ISO directo: "2026-05-10 15:00" o "2026-05-10T15:00"
   const isoMatch = texto.match(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/);
@@ -794,19 +795,20 @@ function parsearFechaEspanol(texto) {
     }
   }
 
-  // Hora: "a las 3pm", "a las 10am", "3:30pm", "15:00"
-  const mHora = txt.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la tarde|tarde|de la noche|noche|de la mañana)?/);
+  // Hora — busca primero número con am/pm explícito, luego "a las X", luego cualquier número
+  const AM_PM = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|de la tarde|tarde|de la noche|noche|de la ma[ñn]ana)/i;
+  const A_LAS = /a\s+las?\s+(\d{1,2})(?::(\d{2}))?/i;
+  let mHora = txt.match(AM_PM) || txt.match(A_LAS);
+
   if (mHora) {
     let h   = parseInt(mHora[1]);
     const m = parseInt(mHora[2] || '0');
-    const p = mHora[3] || '';
+    const p = (mHora[3] || '').toLowerCase();
     if ((p.includes('pm') || p.includes('tarde') || p.includes('noche')) && h < 12) h += 12;
-    if (p.includes('am') && h === 12) h = 0;
+    if ((p.includes('am') || p.includes('mañana') || p.includes('manana')) && h === 12) h = 0;
     if (!p && h < 12) {
-      // Sin AM/PM: horas 1-5 siempre PM (nadie agenda 1am-5am)
-      // Horas 6-11: si estamos en la tarde/noche, asumir PM
-      if (h >= 1 && h <= 5) h += 12;
-      else if (h >= 6 && ahora.getHours() >= 12) h += 12;
+      if (h >= 1 && h <= 5) h += 12;                        // 1-5 siempre PM
+      else if (h >= 6 && ahora.getHours() >= 12) h += 12;   // 6-11: PM si estamos en tarde/noche
     }
     fecha.setHours(h, m, 0, 0);
   } else {

@@ -138,14 +138,19 @@ export const GoogleCalendarConnector = {
     const fechaInicio = inicio instanceof Date ? inicio : new Date(inicio);
     const fechaFin    = new Date(fechaInicio.getTime() + duracion_min * 60 * 1000);
 
+    // Formato local sin "Z" — Google Calendar lo interpreta en la timeZone indicada.
+    // toISOString() daría UTC y Google restaría 4h, poniendo la hora incorrecta.
+    const pad = n => String(n).padStart(2, '0');
+    const dtLocal = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+
     try {
       const res = await calendar.events.insert({
         calendarId: ENV.GOOGLE_CALENDAR_ID || 'primary',
         requestBody: {
           summary:     titulo,
           description: descripcion || '',
-          start: { dateTime: fechaInicio.toISOString(), timeZone: 'America/New_York' },
-          end:   { dateTime: fechaFin.toISOString(),    timeZone: 'America/New_York' },
+          start: { dateTime: dtLocal(fechaInicio), timeZone: 'America/New_York' },
+          end:   { dateTime: dtLocal(fechaFin),    timeZone: 'America/New_York' },
           reminders: {
             useDefault: false,
             overrides: [
