@@ -175,6 +175,10 @@ ALTER TABLE experiments ADD COLUMN IF NOT EXISTS stripe_price_id     VARCHAR(100
 ALTER TABLE experiments ADD COLUMN IF NOT EXISTS stripe_payment_link TEXT;
 ALTER TABLE experiments ADD COLUMN IF NOT EXISTS landing_slug        VARCHAR(150) UNIQUE;
 ALTER TABLE experiments ADD COLUMN IF NOT EXISTS landing_html        TEXT;
+-- causa_pausa: distingue "producto malo" de "error de configuración"
+-- Valores: config_error | sin_datos | mal_rendimiento | audiencia_incorrecta | timing | presupuesto_bajo | decision_automatica
+ALTER TABLE experiments ADD COLUMN IF NOT EXISTS causa_pausa         VARCHAR(50);
+ALTER TABLE experiments ADD COLUMN IF NOT EXISTS notas_pausa         TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_experiments_estado    ON experiments(estado);
 CREATE INDEX IF NOT EXISTS idx_experiments_creado_en ON experiments(creado_en DESC);

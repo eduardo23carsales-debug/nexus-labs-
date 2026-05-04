@@ -11,6 +11,8 @@ import { LeadsDB }                from '../../memory/leads.db.js';
 import { CampaignManager }        from '../../ads_engine/campaign-manager.js';
 import { llamarBriefing }         from '../../call_agent/caller.js';
 import { ClientDB }               from '../../crm/client.db.js';
+import { LearningsDB }            from '../../memory/learnings.db.js';
+import { ExperimentsDB }          from '../../memory/products.db.js';
 import ENV                        from '../../config/env.js';
 import BUSINESS                   from '../../config/business.config.js';
 
@@ -25,20 +27,24 @@ export async function ejecutarAnalista() {
       return;
     }
 
-    // Recopilar todo en paralelo — campañas, conversiones, CRM y plan anterior
-    const [datos, resumenConversiones, resumenCRM, planAnterior] = await Promise.all([
+    // Recopilar todo en paralelo — campañas, conversiones, CRM, plan anterior, learnings y experimentos
+    const [datos, resumenConversiones, resumenCRM, planAnterior, learnings, experimentosPausados] = await Promise.all([
       Promise.all(campanas.map(c => CampaignManager.getDatosCampana(c))),
       LeadsDB.resumenConversiones(),
       ClientDB.resumenPorNicho().catch(() => null),
       PlansDB.cargar().catch(() => null),
+      LearningsDB.ultimos(10).catch(() => []),
+      ExperimentsDB.listarConCausa(['muerto', 'extendido']).catch(() => []),
     ]);
 
-    // Analizar con Claude — incluye contexto histórico para evitar repetir errores del día anterior
+    // Analizar con Claude — contexto unificado: campañas + learnings causales + experimentos pausados
     const plan = await AnthropicConnector.analizarCampanas({
       datos,
       resumenConversiones: { ...resumenConversiones, crmPorNicho: resumenCRM },
       presupuestoMax:      BUSINESS.presupuestoMaxDia,
       planAnterior,
+      learnings,
+      experimentosPausados,
     });
 
     // Formatear mensaje Telegram

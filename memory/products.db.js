@@ -113,12 +113,34 @@ export const ExperimentsDB = {
     return rows[0] || null;
   },
 
-  async actualizarEstado(id, estado, notas = null) {
+  async actualizarEstado(id, estado, notas = null, causaPausa = null) {
     if (!process.env.DATABASE_URL) return;
     await query(
-      `UPDATE experiments SET estado = $1, notas = COALESCE($2, notas), actualizado_en = NOW() WHERE id = $3`,
-      [estado, notas, id]
+      `UPDATE experiments
+       SET estado       = $1,
+           notas        = COALESCE($2, notas),
+           causa_pausa  = COALESCE($3, causa_pausa),
+           notas_pausa  = COALESCE($2, notas_pausa),
+           actualizado_en = NOW()
+       WHERE id = $4`,
+      [estado, notas, causaPausa, id]
     ).catch(() => {});
+  },
+
+  // Experimentos muertos/pausados con su causa — para el Agente Proactivo
+  async listarConCausa(estados = ['muerto', 'extendido']) {
+    if (!process.env.DATABASE_URL) return [];
+    const placeholders = estados.map((_, i) => `$${i + 1}`).join(', ');
+    const { rows } = await query(
+      `SELECT id, nicho, nombre, tipo, precio, estado, causa_pausa, notas_pausa,
+              metricas, creado_en, actualizado_en
+       FROM experiments
+       WHERE estado IN (${placeholders})
+       ORDER BY actualizado_en DESC
+       LIMIT 30`,
+      estados
+    ).catch(() => ({ rows: [] }));
+    return rows;
   },
 
   async actualizarMetricas(id, metricas) {

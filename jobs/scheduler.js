@@ -4,6 +4,7 @@
 
 import cron from 'node-cron';
 import { ejecutarAnalista }    from '../agents/analista/index.js';
+import { ejecutarProactivo }   from '../agents/proactivo/index.js';
 import { ejecutarSupervisor, enviarResumenSemanal } from '../agents/supervisor/index.js';
 import { revisarExperimentos } from '../scaling_agent/index.js';
 import { MetaConnector }       from '../connectors/meta.connector.js';
@@ -24,6 +25,16 @@ export function iniciarScheduler() {
         `2. Graph API Explorer → genera nuevo token\n` +
         `3. Actualiza META_ACCESS_TOKEN en Railway → Redeploy`
       );
+    }
+  }, { timezone: 'America/New_York' });
+
+  // Agente Proactivo — 7:30 AM (30 min antes del Analista)
+  // Ve todo el contexto unificado y Surface insights sin que Eduardo pregunte
+  cron.schedule('30 7 * * *', async () => {
+    try {
+      await ejecutarProactivo();
+    } catch (e) {
+      console.error('[Scheduler] Error en Proactivo:', e.message);
     }
   }, { timezone: 'America/New_York' });
 
@@ -78,7 +89,7 @@ export function iniciarScheduler() {
     }
   }, { timezone: 'America/New_York' });
 
-  console.log('[Scheduler] Jobs iniciados: token-check (00h), analista (8h), supervisor (cada 4h + resumen lunes 9h), scaling (cada 6h), emails (cada 1h, Stripe+Hotmart)');
+  console.log('[Scheduler] Jobs iniciados: token-check (00h), proactivo (7:30h), analista (8h), supervisor (cada 4h + resumen lunes 9h), scaling (cada 6h), emails (cada 1h, Stripe+Hotmart)');
 }
 
 export default iniciarScheduler;

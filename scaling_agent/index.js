@@ -66,7 +66,17 @@ export async function revisarExperimentos() {
         : decision.decision === 'extender_7_dias' ? 'extendido'
         : 'activo'; // ajustar_precio → sigue activo
 
-      await ExperimentsDB.actualizarEstado(exp.id, estadoNuevo, decision.razon);
+      // Registrar causa_pausa para que el Agente Proactivo razone correctamente después
+      const metricas = exp.metricas || {};
+      const causaPausa = estadoNuevo === 'muerto'
+        ? (metricas.clicks < 30
+            ? 'sin_datos'             // muy poco tráfico para evaluar
+            : metricas.clicks > 50 && !metricas.revenue
+              ? 'audiencia_incorrecta' // tráfico sin conversión → audiencia equivocada
+              : 'mal_rendimiento')     // genuinamente no funcionó
+        : null;
+
+      await ExperimentsDB.actualizarEstado(exp.id, estadoNuevo, decision.razon, causaPausa);
 
       // Aprender de la experiencia
       await ProductsMemoryDB.aprenderDeExperimento({
