@@ -28,6 +28,7 @@ import { SystemState }             from '../../config/system-state.js';
 import { ProjectsDB }              from '../../crm/projects.db.js';
 import { LearningsDB }             from '../../memory/learnings.db.js';
 import { AnthropicConnector }      from '../../connectors/anthropic.connector.js';
+import { obtenerPropuestaPendiente, marcarPropuestaEjecutada } from '../../agents/product_brain/index.js';
 import ENV                         from '../../config/env.js';
 
 // Construye config de Jarvis voz con la fecha real inyectada en el system prompt
@@ -453,6 +454,32 @@ async function manejarCallback(cbq) {
     await TelegramConnector.notificar(
       `⛔ <b>Pipeline cancelado</b>\n\n¿Por qué lo detuviste? Cuéntame para que no repita el mismo error.`
     );
+    return;
+  }
+
+  // Product Brain — Eduardo aprueba propuesta de producto
+  if (data.startsWith('pb_crear:')) {
+    const proposalId = parseInt(data.split(':')[1], 10);
+    const nicho = await obtenerPropuestaPendiente(proposalId);
+    if (!nicho) {
+      await TelegramConnector.notificar(`⚠️ Propuesta no encontrada o ya ejecutada.`);
+      return;
+    }
+    await marcarPropuestaEjecutada(proposalId);
+    await TelegramConnector.notificar(
+      `🚀 <b>¡Aprobado!</b> Iniciando pipeline para:\n<b>${esc(nicho.nombre_producto)}</b>\n\n` +
+      `Jarvis lo crea y lanza todo automáticamente. Te notifico en cada paso.`
+    );
+    // Ejecutar pipeline completo via Jarvis tools (en background)
+    procesarMensajeJarvis(
+      `pipeline_completo enfocado en "${nicho.nombre_producto}" nicho ${nicho.nicho} precio ${nicho.precio}`,
+      null
+    ).catch(e => console.error('[ProductBrain] Error ejecutando pipeline:', e.message));
+    return;
+  }
+
+  if (data === 'pb_ignorar') {
+    await TelegramConnector.notificar(`👍 Propuesta ignorada. El lunes te traigo una nueva.`);
     return;
   }
 

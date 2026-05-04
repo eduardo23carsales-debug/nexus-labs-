@@ -13,6 +13,7 @@ import { ExperimentsDB }           from '../../memory/products.db.js';
 import { LearningsDB }             from '../../memory/learnings.db.js';
 import { SupervisorMemory }        from '../supervisor/memory.js';
 import { LeadsDB }                 from '../../memory/leads.db.js';
+import { proponerProducto }        from '../product_brain/index.js';
 
 const SYSTEM = `Eres el cerebro proactivo de Jarvis, el sistema de inteligencia de Nexus Labs.
 
@@ -187,6 +188,18 @@ Analiza todo esto y genera los insights más valiosos para Eduardo. Prioriza exp
 
     await TelegramConnector.notificar(lineas.join('\n'));
     console.log(`[Proactivo] ${insights.length} insights enviados a Eduardo`);
+
+    // Si hay oportunidad de alta prioridad y no hay experimentos activos → proponer producto
+    const hayOportunidadAlta = sorted.some(i => i.tipo === 'oportunidad' && i.prioridad === 'alta');
+    const sinProductosActivos = experimentosActivos.length === 0;
+    if (hayOportunidadAlta && sinProductosActivos) {
+      console.log('[Proactivo] Oportunidad alta detectada + sin productos activos → proponiendo producto');
+      const contextoExtra = sorted
+        .filter(i => i.prioridad === 'alta')
+        .map(i => `${i.titulo}: ${i.detalle}`)
+        .join('\n');
+      setTimeout(() => proponerProducto({ contextoExtra }).catch(() => {}), 3000);
+    }
 
     // Guardar aprendizaje de esta sesión
     LearningsDB.guardar({

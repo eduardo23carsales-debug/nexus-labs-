@@ -5,6 +5,7 @@
 import cron from 'node-cron';
 import { ejecutarAnalista }    from '../agents/analista/index.js';
 import { ejecutarProactivo }   from '../agents/proactivo/index.js';
+import { proponerProducto }    from '../agents/product_brain/index.js';
 import { ejecutarSupervisor, enviarResumenSemanal } from '../agents/supervisor/index.js';
 import { revisarExperimentos } from '../scaling_agent/index.js';
 import { MetaConnector }       from '../connectors/meta.connector.js';
@@ -89,7 +90,16 @@ export function iniciarScheduler() {
     }
   }, { timezone: 'America/New_York' });
 
-  console.log('[Scheduler] Jobs iniciados: token-check (00h), proactivo (7:30h), analista (8h), supervisor (cada 4h + resumen lunes 9h), scaling (cada 6h), emails (cada 1h, Stripe+Hotmart)');
+  // Product Brain — cada lunes 9 AM propone nuevo producto si no hay experimentos activos recientes
+  cron.schedule('0 9 * * 1', async () => {
+    try {
+      await proponerProducto();
+    } catch (e) {
+      console.error('[Scheduler] Error en ProductBrain:', e.message);
+    }
+  }, { timezone: 'America/New_York' });
+
+  console.log('[Scheduler] Jobs iniciados: token-check (00h), proactivo (7:30h), analista (8h), supervisor (cada 4h + resumen lunes 9h), scaling (cada 6h), emails (cada 1h, Stripe+Hotmart), product-brain (lunes 9h)');
 }
 
 export default iniciarScheduler;
