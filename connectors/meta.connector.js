@@ -69,7 +69,7 @@ export const MetaConnector = {
   async getCampanas(soloActivas = false) {
     const filter = soloActivas ? '&effective_status=["ACTIVE"]' : '';
     const data = await this.get(`/${adAccount()}/campaigns`, {
-      fields:        'id,name,status,effective_status,daily_budget,lifetime_budget',
+      fields:        'id,name,status,effective_status,daily_budget,lifetime_budget,start_time,created_time',
       limit:         50,
     });
     const campanas = data.data || [];
@@ -85,17 +85,23 @@ export const MetaConnector = {
         date_preset: datePreset,
         fields:      'spend,clicks,impressions,actions,cpm,ctr',
       });
-      const row = data.data?.[0] || {};
-      const leads = (row.actions || []).find(a => a.action_type === 'lead')?.value || 0;
-      const spend = parseFloat(row.spend || 0);
+      const row     = data.data?.[0] || {};
+      const actions = row.actions || [];
+      const leads   = parseInt(actions.find(a => a.action_type === 'lead')?.value || 0);
+      const visitas = parseInt(actions.find(a => a.action_type === 'landing_page_view')?.value || 0);
+      const spend   = parseFloat(row.spend || 0);
+      // Conversiones reales = leads (lead gen) o visitas landing (tráfico)
+      const conversiones = leads > 0 ? leads : visitas;
       return {
         spend,
-        clicks:      parseInt(row.clicks  || 0),
-        impressions: parseInt(row.impressions || 0),
-        leads:       parseInt(leads),
-        cpl:         leads > 0 ? +(spend / leads).toFixed(2) : null,
-        cpm:         parseFloat(row.cpm || 0),
-        ctr:         parseFloat(row.ctr || 0),
+        clicks:          parseInt(row.clicks     || 0),
+        impressions:     parseInt(row.impressions || 0),
+        leads,
+        visitas_landing: visitas,
+        conversiones,
+        cpl:             conversiones > 0 ? +(spend / conversiones).toFixed(2) : null,
+        cpm:             parseFloat(row.cpm || 0),
+        ctr:             parseFloat(row.ctr || 0),
       };
     } catch {
       return { spend: 0, clicks: 0, impressions: 0, leads: 0, cpl: null, cpm: 0, ctr: 0 };

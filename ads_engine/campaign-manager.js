@@ -40,8 +40,20 @@ export const CampaignManager = {
     const mhoy = await MetaConnector.getMetricas(campana.id, 'today');
 
     // Extraer segmento del nombre (formato: "Nexus Labs — Segmento — fecha")
-    const partes  = campana.name.split(' — ');
+    const partes   = campana.name.split(' — ');
     const segmento = partes[1]?.toLowerCase().replace(/\s+/g, '-') || 'desconocido';
+
+    // Calcular días activa desde start_time (evita confundir campaña nueva con campaña vieja)
+    const startTime  = campana.start_time || campana.created_time;
+    const diasActiva = startTime
+      ? Math.max(1, Math.floor((Date.now() - new Date(startTime).getTime()) / 86_400_000))
+      : null;
+
+    // Tipo de campaña: lead_gen si tiene leads, trafico si tiene visitas_landing
+    const tipoCampana = m7d.leads > 0 ? 'lead_gen'
+      : m7d.visitas_landing > 0        ? 'trafico'
+      : mhoy.visitas_landing > 0       ? 'trafico'
+      : 'desconocido';
 
     return {
       id:              campana.id,
@@ -49,6 +61,8 @@ export const CampaignManager = {
       segmento,
       estado:          campana.effective_status,
       presupuesto_dia: parseFloat(campana.daily_budget || 0) / 100,
+      dias_activa:     diasActiva,
+      tipo_campana:    tipoCampana,
       ultimos_7_dias:  m7d,
       hoy:             mhoy,
     };

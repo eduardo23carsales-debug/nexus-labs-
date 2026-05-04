@@ -67,11 +67,21 @@ CRITERIOS DE CONFIANZA:
 - 50–69%: señal ambigua → pide aprobación o usa "mantener"
 - < 50%: muy incierto → usa "alerta" o "mantener"
 
+TIPOS DE CAMPAÑA:
+- tipo_campana: "lead_gen" → métrica clave = leads. Pausa si gasta > $${BUSINESS.limiteGastoSinLead} con 0 leads
+- tipo_campana: "trafico"  → métrica clave = visitas_landing (NO leads). Evalúa por cpl (costo/visita) y ctr
+- tipo_campana: "desconocido" → usa "mantener" hasta tener más datos
+
+REGLA CRÍTICA — CAMPAÑAS NUEVAS:
+- Si dias_activa <= 3: NUNCA pausar por falta de conversiones. Usar "mantener" siempre.
+- Si dias_activa <= 3 y gasto < $20: el algoritmo de Meta aún está en fase de aprendizaje. Mantener.
+- Solo pausar campaña nueva si el CPL es > 5x el objetivo o hay error técnico evidente.
+
 PRINCIPIOS DE DECISIÓN:
-- Si llevas < 4h activo hoy y no hay datos suficientes, prefiere "mantener"
+- dias_activa es la edad real de la campaña — úsala antes que cualquier otra métrica
 - El historial es tu memoria — si Eduardo rechazó algo similar, sé más conservador
-- Una campaña con buen historial 7d pero mal día de hoy puede estar en un ciclo normal
-- Un CPL excelente con < 3 leads puede ser ruido estadístico — no escalar agresivamente
+- Una campaña de tráfico con buen CTR y visitas_landing es exitosa aunque tenga 0 leads
+- Un CPL excelente con < 3 conversiones puede ser ruido estadístico — no escalar agresivamente
 - Si estás fuera de horario activo: solo puedes "pausar" (emergencias) o "mantener"
 - Explica tu razonamiento en español claro (máx 120 caracteres)`;
 
