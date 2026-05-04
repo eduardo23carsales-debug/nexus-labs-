@@ -36,6 +36,7 @@ import { TwilioConnector }                      from '../connectors/twilio.conne
 import { JarvisMemoryDB }                       from '../memory/jarvis.db.js';
 import { SystemConfigDB }                       from '../memory/config.db.js';
 import { GoogleCalendarConnector }              from '../connectors/google-calendar.connector.js';
+import { LearningsDB }                          from '../memory/learnings.db.js';
 
 // ── Definiciones de tools para Claude ─────────────────
 export const TOOL_DEFINITIONS = [
@@ -746,6 +747,22 @@ El analista reportará el ganador automáticamente. Ideal antes de lanzar con pr
         presupuesto:      { type: 'number', description: 'Presupuesto diario total del test en USD. Se reparte en 3 ad sets. Default: 15 ($5/ad set/día)' },
       },
       required: ['segmento', 'url_destino'],
+    },
+  },
+
+  // ── APRENDIZAJES DEL SISTEMA ──────────────────────
+  {
+    name: 'ver_aprendizajes',
+    description: `Muestra lo que el sistema ha aprendido de campañas, llamadas, productos y ventas.
+El sistema registra automáticamente qué funcionó y qué no en cada acción.
+Úsalo cuando Eduardo diga "¿qué hemos aprendido?", "¿qué funciona?", "¿qué ha fallado?", "muéstrame los aprendizajes", "¿qué errores hemos cometido?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo:  { type: 'string', description: 'Filtrar por tipo: campana, llamada, producto, copy, imagen, nicho, precio, email' },
+        dias:  { type: 'number', description: 'Días hacia atrás. Default: 30' },
+        limite:{ type: 'number', description: 'Cuántos aprendizajes mostrar. Default: 15' },
+      },
     },
   },
 
@@ -2003,6 +2020,34 @@ export const TOOL_HANDLERS = {
     );
 
     return `Test A/B lanzado. Campaña ID: ${campaña.campaign_id} | ${adSetsCreados} ad sets | $${presupuestoDia}/día. El analista reportará el ganador en 3-7 días.`;
+  },
+
+  // ── APRENDIZAJES ───────────────────────────────────
+  async ver_aprendizajes({ tipo = null, dias = 30, limite = 15 } = {}) {
+    const resumen  = await LearningsDB.resumen(dias);
+    const ultimos  = await LearningsDB.consultar({ tipo, limite });
+
+    if (!ultimos.length) {
+      return `El sistema aún no tiene aprendizajes registrados. Se acumularán automáticamente con cada campaña, llamada y venta.`;
+    }
+
+    const lineasResumen = resumen.map(r =>
+      `• ${r.tipo}: ${r.total} total (✅ ${r.exitosos} exitosos, ❌ ${r.fallidos} fallidos)`
+    ).join('\n');
+
+    const lineasUltimos = ultimos.map(l =>
+      `${l.exito ? '✅' : '❌'} [${l.tipo}] ${l.accion}\n   → ${l.resultado}${l.hipotesis ? `\n   💡 ${l.hipotesis}` : ''}`
+    ).join('\n\n');
+
+    await TelegramConnector.notificar(
+      `🧠 <b>Aprendizajes del Sistema (${dias} días)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `${esc(lineasResumen)}\n\n` +
+      `<b>Últimos ${ultimos.length} aprendizajes:</b>\n` +
+      `${esc(lineasUltimos)}`
+    );
+
+    return `${ultimos.length} aprendizajes mostrados. El sistema aprende automáticamente de cada acción.`;
   },
 
   // ── P&L REPORT ─────────────────────────────────────

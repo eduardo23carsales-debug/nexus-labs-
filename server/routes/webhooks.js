@@ -26,6 +26,8 @@ import { StripeConnector }         from '../../connectors/stripe.connector.js';
 import { ResendConnector }         from '../../connectors/resend.connector.js';
 import { SystemState }             from '../../config/system-state.js';
 import { ProjectsDB }              from '../../crm/projects.db.js';
+import { LearningsDB }             from '../../memory/learnings.db.js';
+import { AnthropicConnector }      from '../../connectors/anthropic.connector.js';
 import ENV                         from '../../config/env.js';
 
 // Construye config de Jarvis voz con la fecha real inyectada en el system prompt
@@ -599,13 +601,96 @@ router.post('/webhook/stripe', async (req, res) => {
         ), actualizado_en = NOW() WHERE id = $1`, [exp.id]
       );
 
+      const revenue = (sesion.amount_total || 0) / 100;
+
       await TelegramConnector.notificar(
         `💰 <b>Venta confirmada</b>\n` +
         `📦 ${esc(exp.nombre)}\n` +
-        `💵 $${((sesion.amount_total || 0) / 100).toFixed(2)}\n` +
+        `💵 $${revenue.toFixed(2)}\n` +
         `📧 ${esc(emailCliente)}\n` +
         `✅ Producto entregado por email`
       );
+
+      // Registrar aprendizaje de venta exitosa
+      LearningsDB.guardar({
+        tipo:      'producto',
+        contexto:  `Venta de "${exp.nombre}" — $${revenue} via Stripe`,
+        accion:    `Pipeline completo: ad → landing → pago → entrega`,
+        resultado: `Venta exitosa $${revenue} — ${emailCliente}`,
+        exito:     true,
+        hipotesis: `El funnel completo funcionó para este nicho y precio`,
+        tags:      ['venta', 'stripe', exp.nicho || 'digital'],
+        relevancia: 9,
+      }).catch(() => {});
+
+      // Upsell automático: ofrecer producto complementario 30 min después
+      setTimeout(async () => {
+        try {
+          const { rows: candidatos } = await query(
+            `SELECT * FROM experiments
+             WHERE estado = 'activo' AND id != $1
+             AND stripe_payment_link IS NOT NULL
+             ORDER BY creado_en DESC LIMIT 5`,
+            [exp.id]
+          );
+          if (!candidatos.length) return;
+
+          // Elegir el producto más reciente diferente al comprado
+          const upsellExp = candidatos[0];
+
+          // Verificar que no haya recibido upsell antes
+          const { rows: yaUpsell } = await query(
+            'SELECT id FROM upsells WHERE customer_email = $1 AND experiment_id = $2 LIMIT 1',
+            [emailCliente, exp.id]
+          );
+          if (yaUpsell.length) return;
+
+          // Generar email de upsell con Claude
+          const emailUpsell = await AnthropicConnector.completar({
+            model:     'claude-haiku-4-5-20251001',
+            maxTokens: 300,
+            prompt: `Escribe un email corto de upsell en español para hispanos en USA.
+El cliente acaba de comprar: "${exp.nombre}" por $${exp.precio || revenue}
+Ahora le ofrecemos: "${upsellExp.nombre}" por $${upsellExp.precio || 37}
+
+El email debe:
+- Felicitar por la compra reciente (1 línea)
+- Presentar el producto complementario como oferta exclusiva por ser cliente
+- Máximo 4 líneas de cuerpo
+- Terminar con el link de compra: ${upsellExp.stripe_payment_link}
+
+Devuelve SOLO el texto del email, sin asunto, sin formato extra.`,
+          });
+
+          // Enviar via Resend
+          const { Resend } = await import('resend');
+          const resend = new Resend(ENV.RESEND_API_KEY);
+          await resend.emails.send({
+            from:    `${ENV.EMAIL_FROM_NAME || 'Nexus Labs'} <${ENV.EMAIL_FROM || 'hola@gananciasconai.com'}>`,
+            to:      emailCliente,
+            subject: `${nombreCliente ? nombreCliente.split(' ')[0] : 'Hola'}, tenemos algo más para ti 🎁`,
+            text:    emailUpsell,
+          });
+
+          // Registrar upsell enviado
+          await query(
+            `INSERT INTO upsells (customer_email, experiment_id, upsell_experiment_id, estado, stripe_payment_link)
+             VALUES ($1, $2, $3, 'pendiente', $4) ON CONFLICT DO NOTHING`,
+            [emailCliente, exp.id, upsellExp.id, upsellExp.stripe_payment_link]
+          );
+
+          console.log(`[Stripe Webhook] Upsell enviado a ${emailCliente} — ${upsellExp.nombre}`);
+
+          await TelegramConnector.notificar(
+            `📤 <b>Upsell enviado</b>\n` +
+            `📧 ${esc(emailCliente)}\n` +
+            `🎁 Oferta: ${esc(upsellExp.nombre)} — $${upsellExp.precio || 37}`
+          ).catch(() => {});
+
+        } catch (err) {
+          console.warn('[Stripe Webhook] Upsell falló:', err.message);
+        }
+      }, 30 * 60 * 1000); // 30 minutos después de la compra
 
       console.log(`[Stripe Webhook] Producto entregado a ${emailCliente}`);
     } catch (err) {

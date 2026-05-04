@@ -14,6 +14,7 @@ import { ConversationDB }               from '../memory/conversation.db.js';
 import { GoogleCalendarConnector }      from '../connectors/google-calendar.connector.js';
 import { ResendConnector }              from '../connectors/resend.connector.js';
 import { TwilioConnector }              from '../connectors/twilio.connector.js';
+import { LearningsDB }                  from '../memory/learnings.db.js';
 import ENV                              from '../config/env.js';
 
 const ICONOS = {
@@ -151,6 +152,21 @@ export async function procesarResultadoSofia(callData) {
 
     await TelegramConnector.notificar(msg, { reply_markup: { inline_keyboard: [botones] } });
     console.log(`[Webhook] Resultado: ${nombre} — ${endedReason || status}${citaAgendada ? ' — CITA ✅' : ''}`);
+
+    // Registrar aprendizaje sobre esta llamada
+    LearningsDB.guardar({
+      tipo:      'llamada',
+      contexto:  `Sofia llamó a lead: ${endedReason || status}, duración ${duration || 0}s`,
+      accion:    `Llamada automática a lead nuevo`,
+      resultado: citaAgendada ? `Cita agendada: ${detalleCita}` : `Sin cita — ${ESTADOS_ES[endedReason] || endedReason}`,
+      exito:     citaAgendada,
+      hipotesis: citaAgendada
+        ? `Lead contestó y mostró interés suficiente para agendar`
+        : endedReason === 'no-answer' ? `Lead no contestó — considerar rellamar en diferente horario`
+        : `Lead contestó pero no agendó — posible objeción de precio o timing`,
+      tags:      ['sofia', 'lead', endedReason || status],
+      relevancia: citaAgendada ? 8 : 5,
+    }).catch(() => {});
 
     // Inyectar el resultado en el historial de Jarvis para que sepa sin que Eduardo tenga que preguntar
     const chatId = ENV.TELEGRAM_CHAT_ID;

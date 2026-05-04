@@ -284,6 +284,42 @@ CREATE INDEX IF NOT EXISTS idx_email_tracking_campaign ON email_tracking(campaig
 CREATE INDEX IF NOT EXISTS idx_email_tracking_email    ON email_tracking(email);
 
 
+-- ── APRENDIZAJES DEL SISTEMA ───────────────────────────
+-- El negocio que nunca comete el mismo error dos veces
+CREATE TABLE IF NOT EXISTS learnings (
+  id          SERIAL        PRIMARY KEY,
+  tipo        VARCHAR(30)   NOT NULL,  -- campana | llamada | producto | copy | imagen | nicho | precio | email
+  contexto    TEXT          NOT NULL,  -- situación específica donde ocurrió
+  accion      TEXT          NOT NULL,  -- qué se hizo
+  resultado   TEXT          NOT NULL,  -- qué pasó (métricas reales si aplica)
+  exito       BOOLEAN       NOT NULL DEFAULT TRUE,
+  hipotesis   TEXT,                    -- por qué funcionó o falló (razonamiento causal)
+  tags        JSONB         NOT NULL DEFAULT '[]',  -- ['hispano', 'ciudadania', 'emocional']
+  relevancia  SMALLINT      NOT NULL DEFAULT 5,     -- 1 (baja) a 10 (crítica)
+  creado_en   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_learnings_tipo      ON learnings(tipo);
+CREATE INDEX IF NOT EXISTS idx_learnings_exito     ON learnings(exito);
+CREATE INDEX IF NOT EXISTS idx_learnings_relevancia ON learnings(relevancia DESC);
+CREATE INDEX IF NOT EXISTS idx_learnings_creado_en ON learnings(creado_en DESC);
+
+-- ── UPSELLS POST-COMPRA ──────────────────────────────
+CREATE TABLE IF NOT EXISTS upsells (
+  id                  SERIAL        PRIMARY KEY,
+  customer_email      VARCHAR(255)  NOT NULL,
+  experiment_id       INTEGER       REFERENCES experiments(id),
+  upsell_experiment_id INTEGER      REFERENCES experiments(id),
+  estado              VARCHAR(20)   NOT NULL DEFAULT 'pendiente',  -- pendiente | aceptado | rechazado | expirado
+  stripe_payment_link TEXT,
+  enviado_en          TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  respondido_en       TIMESTAMPTZ,
+  UNIQUE(customer_email, experiment_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_upsells_email  ON upsells(customer_email);
+CREATE INDEX IF NOT EXISTS idx_upsells_estado ON upsells(estado);
+
 -- ── CONFIGURACIÓN DEL SISTEMA ────────────────────────
 CREATE TABLE IF NOT EXISTS system_config (
   clave          VARCHAR(100)  PRIMARY KEY,

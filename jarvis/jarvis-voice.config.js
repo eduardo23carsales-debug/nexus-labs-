@@ -606,6 +606,20 @@ const FUNCIONES_VAPI = [
     },
   },
 
+  // ── APRENDIZAJES ──────────────────────────────────
+  {
+    name:        'ver_aprendizajes',
+    description: 'Muestra lo que el sistema ha aprendido de campañas, llamadas y ventas. Úsalo cuando Eduardo dice "¿qué hemos aprendido?", "¿qué funciona?", "¿qué ha fallado?", "muéstrame los aprendizajes".',
+    parameters: {
+      type: 'object',
+      properties: {
+        tipo:   { type: 'string', description: 'Filtrar por tipo: campana, llamada, producto, copy, email' },
+        dias:   { type: 'number', description: 'Días hacia atrás. Default: 30' },
+        limite: { type: 'number', description: 'Cuántos mostrar. Default: 15' },
+      },
+    },
+  },
+
   // ── P&L REPORT ────────────────────────────────────
   {
     name:        'ver_pnl',
