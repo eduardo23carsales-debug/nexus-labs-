@@ -37,6 +37,7 @@ import { JarvisMemoryDB }                       from '../memory/jarvis.db.js';
 import { SystemConfigDB }                       from '../memory/config.db.js';
 import { GoogleCalendarConnector }              from '../connectors/google-calendar.connector.js';
 import { LearningsDB }                          from '../memory/learnings.db.js';
+import { CallsDB }                              from '../memory/calls.db.js';
 
 // ── Definiciones de tools para Claude ─────────────────
 export const TOOL_DEFINITIONS = [
@@ -776,6 +777,60 @@ Incluye desglose por producto y ROI de cada campaña.
       type: 'object',
       properties: {
         dias: { type: 'number', description: 'Días hacia atrás para el reporte. Default: 7' },
+      },
+    },
+  },
+
+  // ── ANUNCIOS DE META ───────────────────────────────
+  {
+    name: 'ver_anuncios',
+    description: `Muestra los anuncios activos (o pausados) en Meta Ads con su copy, título e imagen.
+Úsalo cuando Eduardo diga "¿qué anuncios tengo activos?", "muéstrame los ads", "¿qué copy estamos usando?", "¿cómo se ven los anuncios?", "¿qué creativos están corriendo?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        solo_activos: { type: 'boolean', description: 'Si true (default), solo muestra anuncios activos. Si false, incluye pausados también.' },
+      },
+    },
+  },
+
+  // ── VENTAS STRIPE ──────────────────────────────────
+  {
+    name: 'ver_ventas_stripe',
+    description: `Muestra las ventas recientes procesadas por Stripe: quién compró, qué producto, cuánto pagó y cuándo.
+Úsalo cuando Eduardo diga "¿quién compró?", "¿tenemos ventas?", "muéstrame los pagos", "¿cuántas ventas en Stripe?", "ver compradores", "¿alguien pagó?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        dias:   { type: 'number', description: 'Días hacia atrás. Default: 7' },
+        limite: { type: 'number', description: 'Cuántas ventas mostrar. Default: 10' },
+      },
+    },
+  },
+
+  // ── AGENDA DE GOOGLE CALENDAR ──────────────────────
+  {
+    name: 'leer_agenda',
+    description: `Lee los próximos eventos del Google Calendar de Eduardo para los próximos días.
+Úsalo cuando Eduardo diga "¿qué tengo en la agenda?", "¿qué eventos tengo?", "¿cuándo es mi próxima cita?", "muéstrame mi calendario", "¿qué pasa esta semana?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        dias: { type: 'number', description: 'Cuántos días hacia adelante ver. Default: 7' },
+      },
+    },
+  },
+
+  // ── TRANSCRIPCIONES DE LLAMADAS ────────────────────
+  {
+    name: 'ver_transcripciones',
+    description: `Muestra la transcripción completa de las últimas llamadas que hizo Sofia a los leads.
+Úsalo cuando Eduardo diga "¿qué dijo Sofia en la llamada?", "muéstrame la transcripción", "¿qué pasó en la llamada con [nombre]?", "¿qué objeciones puso el cliente?", "¿de qué hablaron?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        telefono: { type: 'string', description: 'Si se especifica, muestra la transcripción de la última llamada a ese número.' },
+        limite:   { type: 'number', description: 'Si no hay teléfono, muestra las últimas N llamadas con transcripción. Default: 3' },
       },
     },
   },
@@ -2048,6 +2103,106 @@ export const TOOL_HANDLERS = {
     );
 
     return `${ultimos.length} aprendizajes mostrados. El sistema aprende automáticamente de cada acción.`;
+  },
+
+  // ── ANUNCIOS DE META ───────────────────────────────
+  async ver_anuncios({ solo_activos = true } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const ads = await MetaConnector.getAnuncios(solo_activos);
+    if (!ads.length) {
+      return solo_activos
+        ? 'No hay anuncios activos en Meta en este momento.'
+        : 'No hay anuncios (activos o pausados) en Meta.';
+    }
+    const lineas = ads.map(ad => [
+      `• <b>${ad.nombre}</b> [${ad.estado}]`,
+      ad.titulo !== '—' ? `  📝 Título: ${ad.titulo}` : null,
+      ad.copy   !== '—' ? `  💬 Copy: ${ad.copy.slice(0, 120)}${ad.copy.length > 120 ? '…' : ''}` : null,
+      ad.imagen_url     ? `  🖼️ Imagen: ${ad.imagen_url}` : null,
+    ].filter(Boolean).join('\n'));
+
+    const msg = `🖼️ <b>Anuncios en Meta (${ads.length})</b>\n━━━━━━━━━━━━━━━━━━━━━━\n${lineas.join('\n\n')}`;
+    await notif(msg);
+    return `${ads.length} anuncio(s) mostrado(s).`;
+  },
+
+  // ── VENTAS STRIPE ──────────────────────────────────
+  async ver_ventas_stripe({ dias = 7, limite = 10 } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    if (!StripeConnector.disponible()) {
+      return '⚠️ STRIPE_SECRET_KEY no configurado. Agrega la variable en Railway.';
+    }
+    const desdeTs = Math.floor(Date.now() / 1000) - dias * 24 * 60 * 60;
+    const sesiones = await StripeConnector.getSesionesPagadas(desdeTs);
+    if (!sesiones.length) {
+      return `Sin ventas en Stripe en los últimos ${dias} días.`;
+    }
+    const top = sesiones.slice(0, limite);
+    const revenue = sesiones.reduce((s, v) => s + (v.amount_total || 0) / 100, 0);
+    const lineas = top.map(v => {
+      const fecha  = new Date(v.created * 1000).toLocaleDateString('es-US');
+      const monto  = `$${((v.amount_total || 0) / 100).toFixed(2)}`;
+      const nombre = v.customer_details?.name  || '—';
+      const email  = v.customer_details?.email || '—';
+      return `• ${fecha} — ${nombre} (${email})\n  💵 ${monto}`;
+    });
+    const msg =
+      `💳 <b>Ventas Stripe — Últimos ${dias} días</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Total: ${sesiones.length} ventas | Revenue: $${revenue.toFixed(2)}\n\n` +
+      lineas.join('\n\n');
+    await notif(msg);
+    return `${top.length} ventas mostradas. Revenue total: $${revenue.toFixed(2)}.`;
+  },
+
+  // ── AGENDA GOOGLE CALENDAR ─────────────────────────
+  async leer_agenda({ dias = 7 } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const eventos = await GoogleCalendarConnector.leerEventos(dias);
+    if (!eventos.length) {
+      return `No tienes eventos en los próximos ${dias} días en Google Calendar.`;
+    }
+    const lineas = eventos.map(e => {
+      const inicio = e.inicio
+        ? new Date(e.inicio).toLocaleString('es-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })
+        : '—';
+      return `📅 <b>${e.titulo}</b>\n  🕐 ${inicio}${e.descripcion ? `\n  📝 ${e.descripcion.slice(0, 80)}` : ''}`;
+    });
+    const msg = `📆 <b>Agenda — Próximos ${dias} días (${eventos.length} eventos)</b>\n━━━━━━━━━━━━━━━━━━━━━━\n${lineas.join('\n\n')}`;
+    await notif(msg);
+    return `${eventos.length} evento(s) en los próximos ${dias} días.`;
+  },
+
+  // ── TRANSCRIPCIONES DE LLAMADAS ────────────────────
+  async ver_transcripciones({ telefono = null, limite = 3 } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    if (telefono) {
+      const llamada = await CallsDB.obtenerTranscript(telefono);
+      if (!llamada) return `No encontré transcripción de llamadas al número ${telefono}.`;
+      const fecha = new Date(llamada.llamada_en).toLocaleDateString('es-US');
+      const msg =
+        `📞 <b>Transcripción — ${llamada.nombre} (${llamada.telefono})</b>\n` +
+        `📅 ${fecha}\n` +
+        (llamada.resumen ? `\n💬 Resumen: ${llamada.resumen}\n` : '') +
+        `\n📄 <b>Transcripción completa:</b>\n${llamada.transcript.slice(0, 3000)}${llamada.transcript.length > 3000 ? '\n…(truncado)' : ''}`;
+      await notif(msg);
+      return `Transcripción de ${llamada.nombre} mostrada.`;
+    }
+
+    const llamadas = await CallsDB.ultimasConTranscript(limite);
+    if (!llamadas.length) return 'No hay transcripciones guardadas aún. Se guardan automáticamente cuando Sofia termina una llamada.';
+
+    for (const l of llamadas) {
+      const fecha = new Date(l.llamada_en).toLocaleDateString('es-US');
+      const msg =
+        `📞 <b>${l.nombre} (${l.telefono})</b> — ${fecha}\n` +
+        `${l.cita ? '✅ Cita agendada' : '❌ Sin cita'}\n` +
+        (l.resumen ? `💬 ${l.resumen}\n` : '') +
+        `\n📄 ${l.transcript.slice(0, 1500)}${l.transcript.length > 1500 ? '\n…' : ''}`;
+      await notif(msg);
+    }
+    return `${llamadas.length} transcripción(es) mostrada(s).`;
   },
 
   // ── P&L REPORT ─────────────────────────────────────

@@ -631,6 +631,52 @@ const FUNCIONES_VAPI = [
       },
     },
   },
+
+  {
+    name:        'ver_anuncios',
+    description: 'Muestra los anuncios activos en Meta con copy e imagen. Úsalo cuando Eduardo dice "¿qué anuncios tengo?", "muéstrame los ads", "¿qué copy estamos usando?", "¿cómo se ven los creativos?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        solo_activos: { type: 'boolean', description: 'Default true — solo anuncios activos.' },
+      },
+    },
+  },
+
+  {
+    name:        'ver_ventas_stripe',
+    description: 'Muestra ventas recientes en Stripe: quién compró, cuánto y cuándo. Úsalo cuando Eduardo dice "¿tenemos ventas?", "¿quién compró?", "muéstrame los pagos", "¿cuántas ventas tuvimos?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        dias:   { type: 'number', description: 'Días hacia atrás. Default: 7' },
+        limite: { type: 'number', description: 'Cuántas ventas mostrar. Default: 10' },
+      },
+    },
+  },
+
+  {
+    name:        'leer_agenda',
+    description: 'Lee los próximos eventos del Google Calendar de Eduardo. Úsalo cuando dice "¿qué tengo en la agenda?", "¿cuándo es mi próxima cita?", "muéstrame el calendario".',
+    parameters: {
+      type: 'object',
+      properties: {
+        dias: { type: 'number', description: 'Días hacia adelante. Default: 7' },
+      },
+    },
+  },
+
+  {
+    name:        'ver_transcripciones',
+    description: 'Muestra la transcripción de las últimas llamadas de Sofia. Úsalo cuando Eduardo dice "¿qué dijo Sofia?", "muéstrame la transcripción", "¿qué objeciones puso el cliente?", "¿de qué hablaron?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        telefono: { type: 'string', description: 'Si se da, muestra la transcripción de ese número específico.' },
+        limite:   { type: 'number', description: 'Si no hay teléfono, cuántas llamadas mostrar. Default: 3' },
+      },
+    },
+  },
 ];
 
 // ── Config completa de VAPI ───────────────────────────
