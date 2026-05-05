@@ -834,6 +834,60 @@ Incluye desglose por producto y ROI de cada campaña.
       },
     },
   },
+
+  // ── LEADS PIPELINE ─────────────────────────────────
+  {
+    name: 'ver_leads',
+    description: `Muestra el pipeline de leads: quién llegó, en qué estado están (NUEVO, LLAMADO, CITA, CERRADO) y cuándo.
+Úsalo cuando Eduardo diga "¿qué leads tenemos?", "¿quién llegó hoy?", "muéstrame los leads nuevos", "¿cuántos leads tenemos?", "¿quién está en cita?", "ver pipeline".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        estado: { type: 'string', description: 'Filtrar por estado: NUEVO, LLAMADO, CITA, CERRADO. Si no se da, muestra todos.' },
+        limite: { type: 'number', description: 'Cuántos leads mostrar. Default: 15' },
+      },
+    },
+  },
+
+  // ── RESUMEN DE LLAMADAS DE SOFIA ───────────────────
+  {
+    name: 'ver_llamadas',
+    description: `Muestra estadísticas y historial de las llamadas que hizo Sofia: total, cuántas contestaron, tasa de citas, últimas llamadas.
+Úsalo cuando Eduardo diga "¿cuántas llamadas hizo Sofia?", "¿cómo van las llamadas?", "¿cuántos contestaron?", "ver historial de llamadas", "¿cuál es la tasa de respuesta?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        limite: { type: 'number', description: 'Cuántas llamadas recientes mostrar. Default: 10' },
+      },
+    },
+  },
+
+  // ── REACTIVAR CAMPAÑA ──────────────────────────────
+  {
+    name: 'reactivar_campana',
+    description: `Reactiva (despausa) una campaña de Meta Ads que está pausada.
+Úsalo cuando Eduardo diga "reactiva la campaña", "activa de nuevo [nombre]", "despausa [campaña]", "vuelve a activar [nombre]".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID de la campaña a reactivar.' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  // ── EXPERIMENTOS PAUSADOS CON CAUSA ───────────────
+  {
+    name: 'ver_experimentos_pausados',
+    description: `Muestra los productos/experimentos pausados o muertos con la causa exacta de por qué se pausaron (error de configuración, sin datos, mal rendimiento, etc.).
+Úsalo cuando Eduardo diga "¿qué productos pausamos?", "¿por qué se pausó [producto]?", "muéstrame los experimentos muertos", "¿cuáles podemos relanzar?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        estados: { type: 'string', description: 'Estados a incluir separados por coma. Default: muerto,pausado' },
+      },
+    },
+  },
 ];
 
 // ── Parser de fechas en español ────────────────────────
@@ -2171,6 +2225,103 @@ export const TOOL_HANDLERS = {
     const msg = `📆 <b>Agenda — Próximos ${dias} días (${eventos.length} eventos)</b>\n━━━━━━━━━━━━━━━━━━━━━━\n${lineas.join('\n\n')}`;
     await notif(msg);
     return `${eventos.length} evento(s) en los próximos ${dias} días.`;
+  },
+
+  // ── LEADS PIPELINE ─────────────────────────────────
+  async ver_leads({ estado = null, limite = 15 } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const leads = await LeadsDB.listar({ estado, limit: limite });
+    if (!leads.length) {
+      return estado ? `No hay leads con estado "${estado}".` : 'No hay leads registrados aún.';
+    }
+    const resumen = await LeadsDB.resumenConversiones();
+    const cabecera =
+      `👥 Total: ${resumen.total_leads} leads | ` +
+      `📞 Llamados: ${resumen.llamados || 0} | ` +
+      `🗓 Citas: ${resumen.citas || 0} | ` +
+      `✅ Cerrados: ${resumen.cierres || 0}`;
+
+    const EMOJI = { NUEVO: '🆕', LLAMADO: '📞', CITA: '🗓', CERRADO: '✅', FRIO: '🧊', TIBIO: '🌡', CALIENTE: '🔥' };
+    const lineas = leads.map(l => {
+      const fecha = new Date(l.creado_en).toLocaleDateString('es-US');
+      const est   = EMOJI[l.estado] || '•';
+      const score = EMOJI[l.score]  || '';
+      return `${est}${score} <b>${l.nombre || '—'}</b> — ${l.telefono}\n  ${l.segmento || 'sin segmento'} | ${fecha}${l.dia_cita ? ` | Cita: ${l.dia_cita}` : ''}`;
+    });
+
+    const msg = `📋 <b>Pipeline de Leads</b>\n${cabecera}\n━━━━━━━━━━━━━━━━━━━━━━\n${lineas.join('\n\n')}`;
+    await notif(msg);
+    return `${leads.length} leads mostrados.`;
+  },
+
+  // ── RESUMEN DE LLAMADAS DE SOFIA ───────────────────
+  async ver_llamadas({ limite = 10 } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const [stats, ultimas] = await Promise.all([
+      CallsDB.resumen(),
+      CallsDB.listar({ limit: limite }),
+    ]);
+
+    const cabecera = [
+      `📞 <b>Llamadas de Sofia</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      `Total: ${stats.total} | Contestaron: ${stats.contestadas} | Sin respuesta: ${stats.sin_respuesta}`,
+      `Citas agendadas: ${stats.citas_agendadas} | Tasa respuesta: ${stats.tasa_respuesta}% | Conversión: ${stats.tasa_conversion}%`,
+    ].join('\n');
+
+    const ICONOS = { ended: '✅', 'no-answer': '📵', busy: '📵', failed: '❌', voicemail: '📬', 'customer-ended-call': '✅', 'assistant-ended-call': '✅' };
+    const lineas = ultimas.map(c => {
+      const fecha = new Date(c.llamada_en).toLocaleDateString('es-US');
+      const icono = ICONOS[c.razon_fin] || '📞';
+      return `${icono} ${c.nombre} — ${c.telefono}\n  ${fecha} | ${c.duracion_s || 0}s${c.cita ? ' | 🗓 CITA' : ''}`;
+    });
+
+    const msg = `${cabecera}\n\n<b>Últimas ${ultimas.length}:</b>\n${lineas.join('\n\n')}`;
+    await notif(msg);
+    return `Stats: ${stats.total} llamadas, ${stats.citas_agendadas} citas, ${stats.tasa_respuesta}% tasa de respuesta.`;
+  },
+
+  // ── REACTIVAR CAMPAÑA ──────────────────────────────
+  async reactivar_campana({ nombre_o_id }) {
+    const campanas = await CampaignManager.buscarPorNombre(nombre_o_id);
+    if (!campanas.length) return `No encontré campaña con "${nombre_o_id}". Usa ver_reporte para ver todas las campañas.`;
+    const campana = campanas[0];
+    await CampaignManager.activar(campana.id);
+    await TelegramConnector.notificar(`▶️ <b>Campaña reactivada:</b> ${campana.name}`).catch(() => {});
+    return `Campaña "${campana.name}" reactivada en Meta Ads.`;
+  },
+
+  // ── EXPERIMENTOS PAUSADOS CON CAUSA ───────────────
+  async ver_experimentos_pausados({ estados = 'muerto,pausado' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const listaEstados = estados.split(',').map(s => s.trim());
+    const exps = await ExperimentsDB.listarConCausa(listaEstados);
+    if (!exps.length) return `No hay experimentos con estado: ${estados}.`;
+
+    const CAUSA_LABEL = {
+      config_error:         '⚙️ Error de configuración',
+      sin_datos:            '📊 Sin datos suficientes',
+      mal_rendimiento:      '📉 Mal rendimiento',
+      audiencia_incorrecta: '🎯 Audiencia incorrecta',
+      timing:               '⏰ Mal momento',
+      presupuesto_bajo:     '💸 Presupuesto bajo',
+      decision_automatica:  '🤖 Decisión automática',
+    };
+
+    const lineas = exps.map(e => {
+      const causa  = CAUSA_LABEL[e.causa_pausa] || (e.causa_pausa ? `❓ ${e.causa_pausa}` : '❓ Sin causa registrada');
+      const relanzable = ['config_error', 'sin_datos', 'presupuesto_bajo', 'timing'].includes(e.causa_pausa);
+      return [
+        `• <b>${e.nombre}</b> ($${e.precio}) — ${e.estado}`,
+        `  Causa: ${causa}`,
+        e.notas_pausa ? `  Nota: ${e.notas_pausa.slice(0, 80)}` : null,
+        relanzable ? `  💡 <i>Candidato a relanzar</i>` : null,
+      ].filter(Boolean).join('\n');
+    });
+
+    const msg = `🗂 <b>Experimentos pausados (${exps.length})</b>\n━━━━━━━━━━━━━━━━━━━━━━\n${lineas.join('\n\n')}`;
+    await notif(msg);
+    return `${exps.length} experimentos mostrados. Los marcados como "Candidato a relanzar" se pausaron por causas externas, no por mal producto.`;
   },
 
   // ── TRANSCRIPCIONES DE LLAMADAS ────────────────────

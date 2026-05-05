@@ -677,6 +677,52 @@ const FUNCIONES_VAPI = [
       },
     },
   },
+
+  {
+    name:        'ver_leads',
+    description: 'Muestra el pipeline de leads: quién llegó, estado (NUEVO, LLAMADO, CITA, CERRADO). Úsalo cuando Eduardo dice "¿qué leads tenemos?", "¿quién llegó hoy?", "muéstrame los leads nuevos", "ver pipeline".',
+    parameters: {
+      type: 'object',
+      properties: {
+        estado: { type: 'string', description: 'Filtrar por estado: NUEVO, LLAMADO, CITA, CERRADO.' },
+        limite: { type: 'number', description: 'Cuántos leads mostrar. Default: 15' },
+      },
+    },
+  },
+
+  {
+    name:        'ver_llamadas',
+    description: 'Estadísticas e historial de llamadas de Sofia: total, cuántas contestaron, tasa de citas. Úsalo cuando Eduardo dice "¿cuántas llamadas hizo Sofia?", "¿cómo van las llamadas?", "tasa de respuesta".',
+    parameters: {
+      type: 'object',
+      properties: {
+        limite: { type: 'number', description: 'Cuántas llamadas recientes mostrar. Default: 10' },
+      },
+    },
+  },
+
+  {
+    name:        'reactivar_campana',
+    description: 'Reactiva una campaña de Meta Ads pausada. Úsalo cuando Eduardo dice "reactiva la campaña", "activa de nuevo [nombre]", "despausa [campaña]".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID de la campaña.' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  {
+    name:        'ver_experimentos_pausados',
+    description: 'Muestra productos pausados con la causa exacta: error de configuración, sin datos, mal rendimiento, etc. Úsalo cuando Eduardo dice "¿qué productos pausamos?", "¿cuáles podemos relanzar?", "¿por qué se pausó?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        estados: { type: 'string', description: 'Estados separados por coma. Default: muerto,pausado' },
+      },
+    },
+  },
 ];
 
 // ── Config completa de VAPI ───────────────────────────
