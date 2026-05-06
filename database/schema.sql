@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS calls (
   llamada_en  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS transcript TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_calls_telefono   ON calls(telefono);
 CREATE INDEX IF NOT EXISTS idx_calls_llamada_en ON calls(llamada_en DESC);
 CREATE INDEX IF NOT EXISTS idx_calls_cita       ON calls(cita);
@@ -170,9 +172,10 @@ CREATE TABLE IF NOT EXISTS experiments (
   actualizado_en      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE experiments ADD COLUMN IF NOT EXISTS stripe_product_id  VARCHAR(100);
-ALTER TABLE experiments ADD COLUMN IF NOT EXISTS stripe_price_id     VARCHAR(100);
-ALTER TABLE experiments ADD COLUMN IF NOT EXISTS stripe_payment_link TEXT;
+ALTER TABLE experiments ADD COLUMN IF NOT EXISTS stripe_product_id      VARCHAR(100);
+ALTER TABLE experiments ADD COLUMN IF NOT EXISTS stripe_price_id         VARCHAR(100);
+ALTER TABLE experiments ADD COLUMN IF NOT EXISTS stripe_payment_link     TEXT;
+ALTER TABLE experiments ADD COLUMN IF NOT EXISTS stripe_payment_link_id  VARCHAR(100);
 ALTER TABLE experiments ADD COLUMN IF NOT EXISTS landing_slug        VARCHAR(150) UNIQUE;
 ALTER TABLE experiments ADD COLUMN IF NOT EXISTS landing_html        TEXT;
 -- causa_pausa: distingue "producto malo" de "error de configuración"

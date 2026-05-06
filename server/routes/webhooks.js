@@ -589,13 +589,17 @@ router.post('/webhook/stripe', async (req, res) => {
       );
       if (yaEntregado.length) return;
 
-      // Buscar el experimento por payment_link
+      // Buscar el experimento por payment_link_id (plink_xxx) — match exacto
+      // sesion.payment_link es el ID del payment link (plink_xxx), no la URL
       const { rows: exps } = await query(
         `SELECT * FROM experiments WHERE stripe_payment_link IS NOT NULL ORDER BY creado_en DESC LIMIT 20`
       );
       const exp = exps.find(e =>
-        sesion.payment_link && e.stripe_payment_link?.includes(sesion.payment_link)
-      ) || exps[0];
+        sesion.payment_link && (
+          e.stripe_payment_link_id === sesion.payment_link ||
+          e.stripe_price_id === sesion.line_items?.data?.[0]?.price?.id
+        )
+      ) || exps.find(e => e.estado === 'activo') || exps[0];
 
       if (!exp) {
         console.warn('[Stripe Webhook] No se encontró experimento para el pago', sesion.id);

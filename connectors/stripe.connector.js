@@ -46,9 +46,10 @@ export const StripeConnector = {
     console.log(`[Stripe] Producto creado: ${nombre} — $${precio} → ${paymentLink.url}`);
 
     return {
-      stripe_product_id:    producto.id,
-      stripe_price_id:      precioObj.id,
-      stripe_payment_link:  paymentLink.url,
+      stripe_product_id:       producto.id,
+      stripe_price_id:         precioObj.id,
+      stripe_payment_link:     paymentLink.url,
+      stripe_payment_link_id:  paymentLink.id,   // plink_xxx — para match exacto en webhook
       precio,
     };
   },

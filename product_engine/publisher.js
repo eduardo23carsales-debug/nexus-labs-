@@ -300,18 +300,20 @@ export async function publicarConStripe(nicho, htmlProducto, experimentoId = nul
   if (experimentoId) {
     await query(
       `UPDATE experiments SET
-        stripe_product_id   = $1,
-        stripe_price_id     = $2,
-        stripe_payment_link = $3,
-        landing_slug        = $4,
-        landing_html        = $5,
-        producto_url        = $6,
-        actualizado_en      = NOW()
-       WHERE id = $7`,
+        stripe_product_id      = $1,
+        stripe_price_id        = $2,
+        stripe_payment_link    = $3,
+        stripe_payment_link_id = $4,
+        landing_slug           = $5,
+        landing_html           = $6,
+        producto_url           = $7,
+        actualizado_en         = NOW()
+       WHERE id = $8`,
       [
         stripeData.stripe_product_id,
         stripeData.stripe_price_id,
         stripeData.stripe_payment_link,
+        stripeData.stripe_payment_link_id || null,
         slug,
         landingHTML,
         landingUrl,
@@ -320,8 +322,8 @@ export async function publicarConStripe(nicho, htmlProducto, experimentoId = nul
     );
   } else {
     const { rows } = await query(
-      `INSERT INTO experiments (nicho, nombre, tipo, precio, stripe_product_id, stripe_price_id, stripe_payment_link, landing_slug, landing_html, producto_url, contenido_producto)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+      `INSERT INTO experiments (nicho, nombre, tipo, precio, stripe_product_id, stripe_price_id, stripe_payment_link, stripe_payment_link_id, landing_slug, landing_html, producto_url, contenido_producto)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
       [
         nicho.nicho,
         nicho.nombre_producto,
@@ -330,6 +332,7 @@ export async function publicarConStripe(nicho, htmlProducto, experimentoId = nul
         stripeData.stripe_product_id,
         stripeData.stripe_price_id,
         stripeData.stripe_payment_link,
+        stripeData.stripe_payment_link_id || null,
         slug,
         landingHTML,
         landingUrl,
