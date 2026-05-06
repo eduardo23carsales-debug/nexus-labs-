@@ -216,7 +216,9 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
   }
 
   const ts     = Date.now();
-  const nombre = `Nexus Labs —${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
+  const nombre = nombreProducto
+    ? `Nexus Labs — ${nombreProducto.slice(0, 40)} — ${new Date().toLocaleDateString('es-US')}`
+    : `Nexus Labs — ${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
 
   // 1. Campaña — presupuesto + bid_strategy a nivel campaña (requerido con CBO en API v25)
   const campana = await MetaConnector.post(`/${adAccount()}/campaigns`, {
@@ -327,7 +329,9 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
   if (!urlDestino) throw new Error('urlDestino es requerido para campañas de tráfico');
 
   const ts     = Date.now();
-  const nombre = `Nexus Labs — ${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
+  const nombre = nombreProducto
+    ? `Nexus Labs — ${nombreProducto.slice(0, 40)} — ${new Date().toLocaleDateString('es-US')}`
+    : `Nexus Labs — ${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
 
   // 1. Campaña de tráfico — presupuesto + bid_strategy a nivel campaña (CBO)
   const campana = await MetaConnector.post(`/${adAccount()}/campaigns`, {
