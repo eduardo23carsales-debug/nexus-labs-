@@ -723,6 +723,18 @@ const FUNCIONES_VAPI = [
       },
     },
   },
+
+  {
+    name:        'auditar_producto',
+    description: 'Verifica que un producto esté completamente conectado: landing accesible, botón Stripe en la página, producto entregable, campaña Meta apuntando a la URL correcta. Úsalo cuando Eduardo dice "verifica el producto", "¿está todo bien?", "¿va a funcionar la venta?", "audita [producto]".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID del producto a auditar.' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
 ];
 
 // ── Config completa de VAPI ───────────────────────────

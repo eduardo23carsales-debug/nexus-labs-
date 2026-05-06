@@ -888,6 +888,20 @@ Incluye desglose por producto y ROI de cada campaña.
       },
     },
   },
+
+  // ── AUDITORÍA COMPLETA DE PRODUCTO ─────────────────
+  {
+    name: 'auditar_producto',
+    description: `Verifica que un producto esté completamente conectado end-to-end: landing accesible, botón Stripe en la landing, producto entregable al comprador, campaña Meta apuntando a la URL correcta.
+Úsalo cuando Eduardo diga "verifica el producto", "¿está todo bien con [producto]?", "¿va a funcionar la venta?", "audita el producto", "¿qué está roto?", "revisa que esté todo conectado".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID del producto/experimento a auditar.' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
 ];
 
 // ── Parser de fechas en español ────────────────────────
@@ -2226,6 +2240,145 @@ export const TOOL_HANDLERS = {
     const msg = `📆 <b>Agenda — Próximos ${dias} días (${eventos.length} eventos)</b>\n━━━━━━━━━━━━━━━━━━━━━━\n${lineas.join('\n\n')}`;
     await notif(msg);
     return `${eventos.length} evento(s) en los próximos ${dias} días.`;
+  },
+
+  // ── AUDITORÍA COMPLETA DE PRODUCTO ─────────────────
+  async auditar_producto({ nombre_o_id }) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const checks = [];
+    const ok  = (label, detalle = '') => checks.push({ ok: true,  label, detalle });
+    const err = (label, detalle = '') => checks.push({ ok: false, label, detalle });
+    const warn = (label, detalle = '') => checks.push({ ok: null,  label, detalle });
+
+    // 1. Encontrar el experimento
+    let exp = null;
+    const id = parseInt(nombre_o_id);
+    if (!isNaN(id)) {
+      exp = await ExperimentsDB.obtener(id);
+    } else {
+      const lista = await ExperimentsDB.listar('activo');
+      exp = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+      if (!exp) {
+        const todas = await ExperimentsDB.listar('muerto');
+        exp = [...todas, ...(await ExperimentsDB.listar('extendido'))].find(
+          e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase())
+        );
+      }
+    }
+
+    if (!exp) {
+      return `No encontré producto con "${nombre_o_id}". Usa ver_experimentos para ver los disponibles.`;
+    }
+
+    const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : null;
+
+    // CHECK 1: Landing slug
+    if (exp.landing_slug) ok('Landing slug', exp.landing_slug);
+    else err('Landing slug', 'Sin slug — la landing no tiene URL propia');
+
+    // CHECK 2: Stripe payment link
+    if (exp.stripe_payment_link) ok('Stripe link', exp.stripe_payment_link);
+    else err('Stripe link', 'Sin Stripe — los usuarios no pueden pagar');
+
+    // CHECK 3: Landing HTML
+    if (exp.landing_html && exp.landing_html.length > 500) ok('Landing HTML generada', `${Math.round(exp.landing_html.length / 1024)} KB`);
+    else err('Landing HTML', 'Sin HTML de landing — la página de ventas no existe');
+
+    // CHECK 4: Stripe link dentro del HTML de la landing
+    if (exp.landing_html && exp.stripe_payment_link && exp.landing_html.includes(exp.stripe_payment_link)) {
+      ok('Stripe embebido en landing', 'El botón de compra apunta al checkout correcto');
+    } else if (exp.landing_html && exp.stripe_payment_link) {
+      err('Stripe embebido en landing', 'El HTML de la landing NO contiene el link de Stripe — el botón de compra está roto');
+    } else {
+      warn('Stripe embebido en landing', 'No se puede verificar sin landing HTML o Stripe link');
+    }
+
+    // CHECK 5: Landing accesible via HTTP
+    if (dominio && exp.landing_slug) {
+      const landingUrl = `${dominio}/p/${exp.landing_slug}`;
+      try {
+        const res = await fetch(landingUrl, { method: 'HEAD', signal: AbortSignal.timeout(8000) });
+        if (res.ok) ok('Landing accesible', `${landingUrl} → ${res.status}`);
+        else err('Landing accesible', `${landingUrl} → HTTP ${res.status}`);
+      } catch (e) {
+        err('Landing accesible', `No responde: ${e.message}`);
+      }
+    } else {
+      warn('Landing accesible', dominio ? 'Sin slug' : 'RAILWAY_DOMAIN no configurado');
+    }
+
+    // CHECK 6: Producto (acceso comprador) accesible
+    if (dominio && exp.landing_slug) {
+      const accesoUrl = `${dominio}/acceso/${exp.landing_slug}`;
+      try {
+        const res = await fetch(accesoUrl, { method: 'HEAD', signal: AbortSignal.timeout(8000) });
+        if (res.ok) ok('Producto entregable', `${accesoUrl} → ${res.status}`);
+        else err('Producto entregable', `${accesoUrl} → HTTP ${res.status} — el comprador no puede acceder al producto`);
+      } catch (e) {
+        err('Producto entregable', `No responde: ${e.message}`);
+      }
+    } else {
+      warn('Producto entregable', 'No se puede verificar sin dominio o slug');
+    }
+
+    // CHECK 7: Contenido del producto generado
+    if (exp.contenido_producto && exp.contenido_producto.length > 10000) {
+      ok('Contenido del producto', `${Math.round(exp.contenido_producto.length / 1024)} KB generados`);
+    } else if (exp.contenido_producto) {
+      warn('Contenido del producto', `Solo ${exp.contenido_producto.length} caracteres — puede estar incompleto`);
+    } else {
+      err('Contenido del producto', 'Sin contenido — el comprador recibirá una página vacía');
+    }
+
+    // CHECK 8: Campaña Meta apuntando al producto
+    try {
+      const campanas = await MetaConnector.getCampanas(false); // activas + pausadas
+      const landingUrl = dominio && exp.landing_slug ? `${dominio}/p/${exp.landing_slug}` : null;
+      const campañasProducto = [];
+
+      for (const c of campanas) {
+        const nombreMatch = exp.nombre && c.name.toLowerCase().includes(exp.nombre.toLowerCase().slice(0, 15));
+        campañasProducto.push({ nombre: c.name, estado: c.effective_status, match: nombreMatch });
+      }
+
+      const activas = campañasProducto.filter(c => c.estado === 'ACTIVE');
+      const conMatch = campañasProducto.filter(c => c.match);
+
+      if (conMatch.length > 0) {
+        ok('Campaña Meta vinculada', conMatch.map(c => `${c.nombre} [${c.estado}]`).join(', '));
+      } else if (activas.length > 0) {
+        warn('Campaña Meta vinculada', `Hay ${activas.length} campaña(s) activa(s) pero ninguna tiene el nombre del producto — verifica que apunten a: ${landingUrl || exp.stripe_payment_link || 'la landing'}`);
+      } else {
+        warn('Campaña Meta vinculada', 'No se encontró campaña activa para este producto');
+      }
+    } catch (e) {
+      warn('Campaña Meta', `No se pudo verificar: ${e.message}`);
+    }
+
+    // Generar reporte final
+    const pasaron = checks.filter(c => c.ok === true).length;
+    const fallaron = checks.filter(c => c.ok === false).length;
+    const alertas  = checks.filter(c => c.ok === null).length;
+    const total    = checks.length;
+
+    const EMOJI = { true: '✅', false: '❌', null: '⚠️' };
+    const lineas = checks.map(c => `${EMOJI[String(c.ok)]} <b>${c.label}</b>${c.detalle ? `\n   ${c.detalle}` : ''}`);
+
+    const estado = fallaron === 0 ? '🟢 LISTO PARA VENDER' : `🔴 ${fallaron} PROBLEMA(S) CRÍTICO(S)`;
+    const msg =
+      `🔍 <b>Auditoría — ${esc(exp.nombre)}</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `${estado}\n` +
+      `✅ ${pasaron}/${total} checks | ❌ ${fallaron} errores | ⚠️ ${alertas} alertas\n\n` +
+      lineas.join('\n\n');
+
+    await notif(msg);
+
+    if (fallaron === 0) {
+      return `Producto "${exp.nombre}" — ${pasaron}/${total} checks OK. Listo para vender.`;
+    }
+    const errores = checks.filter(c => c.ok === false).map(c => `${c.label}: ${c.detalle}`).join('; ');
+    return `Producto "${exp.nombre}" — ${fallaron} problema(s) crítico(s): ${errores}`;
   },
 
   // ── LEADS PIPELINE ─────────────────────────────────
