@@ -2170,9 +2170,10 @@ export const TOOL_HANDLERS = {
     }
     const lineas = ads.map(ad => [
       `• <b>${ad.nombre}</b> [${ad.estado}]`,
-      ad.titulo !== '—' ? `  📝 Título: ${ad.titulo}` : null,
-      ad.copy   !== '—' ? `  💬 Copy: ${ad.copy.slice(0, 120)}${ad.copy.length > 120 ? '…' : ''}` : null,
-      ad.imagen_url     ? `  🖼️ Imagen: ${ad.imagen_url}` : null,
+      ad.titulo !== '—'  ? `  📝 Título: ${ad.titulo}` : null,
+      ad.copy   !== '—'  ? `  💬 Copy: ${ad.copy.slice(0, 100)}${ad.copy.length > 100 ? '…' : ''}` : null,
+      ad.url_destino     ? `  🔗 URL: ${ad.url_destino}` : `  ⚠️ URL destino: no detectada`,
+      ad.imagen_url      ? `  🖼️ Imagen: ${ad.imagen_url}` : null,
     ].filter(Boolean).join('\n'));
 
     const msg = `🖼️ <b>Anuncios en Meta (${ads.length})</b>\n━━━━━━━━━━━━━━━━━━━━━━\n${lineas.join('\n\n')}`;

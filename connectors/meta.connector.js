@@ -78,6 +78,35 @@ export const MetaConnector = {
       : campanas;
   },
 
+  // Obtener anuncios activos con su creative (copy + imagen)
+  async getAnuncios(soloActivos = true) {
+    try {
+      const statusFilter = soloActivos ? ['ACTIVE'] : ['ACTIVE', 'PAUSED'];
+      const data = await this.get(`/${adAccount()}/ads`, {
+        fields:           'id,name,status,effective_status,adset_id,campaign_id,creative{id,name,body,title,image_url,thumbnail_url,object_story_spec,link_url}',
+        effective_status: JSON.stringify(statusFilter),
+        limit:            25,
+      });
+      return (data.data || []).map(ad => {
+        const spec = ad.creative?.object_story_spec?.link_data || {};
+        return {
+          id:          ad.id,
+          nombre:      ad.name,
+          estado:      ad.effective_status,
+          campaña_id:  ad.campaign_id,
+          adset_id:    ad.adset_id,
+          copy:        ad.creative?.body || spec.message || '—',
+          titulo:      ad.creative?.title || spec.name || '—',
+          imagen_url:  ad.creative?.image_url || ad.creative?.thumbnail_url || null,
+          url_destino: ad.creative?.link_url || spec.link || null,
+        };
+      });
+    } catch (err) {
+      console.warn('[Meta] Error obteniendo anuncios:', err.message);
+      return [];
+    }
+  },
+
   // Métricas de una campaña en un período
   async getMetricas(campanaId, datePreset = 'last_7d') {
     try {
