@@ -67,7 +67,7 @@ export const ClientDB = {
       JSON.stringify(Array.isArray(prev.historial) ? prev.historial : []),
       datos.proxima_accion || null,
       datos.notas    || prev.notas    || '',
-      etiquetas,
+      JSON.stringify(Array.isArray(etiquetas) ? etiquetas : []),
     ]);
     return rows[0];
   },
