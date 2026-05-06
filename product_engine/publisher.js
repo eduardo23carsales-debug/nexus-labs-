@@ -307,8 +307,9 @@ export async function publicarConStripe(nicho, htmlProducto, experimentoId = nul
         landing_slug           = $5,
         landing_html           = $6,
         producto_url           = $7,
+        contenido_producto     = COALESCE($8, contenido_producto),
         actualizado_en         = NOW()
-       WHERE id = $8`,
+       WHERE id = $9`,
       [
         stripeData.stripe_product_id,
         stripeData.stripe_price_id,
@@ -317,6 +318,7 @@ export async function publicarConStripe(nicho, htmlProducto, experimentoId = nul
         slug,
         landingHTML,
         landingUrl,
+        htmlProducto || null,
         experimentoId,
       ]
     );

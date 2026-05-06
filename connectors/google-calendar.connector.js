@@ -167,6 +167,42 @@ export const GoogleCalendarConnector = {
       return null;
     }
   },
+
+  // Leer próximos eventos de la agenda de Eduardo
+  async leerEventos(dias = 7) {
+    const creds = getCredentials();
+    if (!creds) return [];
+    try {
+      const { google } = await import('googleapis');
+      const auth = new google.auth.GoogleAuth({
+        credentials: creds,
+        scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+      });
+      const calendar = google.calendar({ version: 'v3', auth });
+      const ahora    = new Date();
+      const hasta    = new Date(ahora.getTime() + dias * 24 * 60 * 60 * 1000);
+
+      const res = await calendar.events.list({
+        calendarId:   ENV.GOOGLE_CALENDAR_ID || 'primary',
+        timeMin:      ahora.toISOString(),
+        timeMax:      hasta.toISOString(),
+        maxResults:   20,
+        singleEvents: true,
+        orderBy:      'startTime',
+      });
+
+      return (res.data.items || []).map(e => ({
+        titulo:     e.summary || 'Sin título',
+        inicio:     e.start?.dateTime || e.start?.date,
+        fin:        e.end?.dateTime   || e.end?.date,
+        descripcion: e.description || '',
+        url:        e.htmlLink || null,
+      }));
+    } catch (err) {
+      console.error('[GoogleCalendar] Error leyendo eventos:', err.message);
+      return [];
+    }
+  },
 };
 
 export default GoogleCalendarConnector;

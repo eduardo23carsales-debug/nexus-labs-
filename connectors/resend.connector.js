@@ -67,8 +67,11 @@ export const ResendConnector = {
       if (!exps.length) continue;
 
       const exp = exps.find(e =>
-        sesion.payment_link && e.stripe_payment_link?.includes(sesion.payment_link)
-      ) || exps[0];
+        sesion.payment_link && (
+          e.stripe_payment_link_id === sesion.payment_link ||
+          e.stripe_price_id === sesion.line_items?.data?.[0]?.price?.id
+        )
+      ) || exps.find(e => e.estado === 'activo') || exps[0];
 
       try {
         const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
@@ -139,8 +142,8 @@ export const ResendConnector = {
       if (comprador.length) continue;
 
       const exp = exps.find(e =>
-        sesion.payment_link && e.stripe_payment_link?.includes(sesion.payment_link)
-      ) || exps[0];
+        sesion.payment_link && e.stripe_payment_link_id === sesion.payment_link
+      ) || exps.find(e => e.estado === 'activo') || exps[0];
       if (!exp) continue;
 
       try {

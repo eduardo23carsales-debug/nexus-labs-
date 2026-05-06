@@ -8,8 +8,8 @@ export const CallsDB = {
 
   async registrar(llamada) {
     await query(`
-      INSERT INTO calls (call_id, nombre, telefono, estado, razon_fin, duracion_s, cita, dia_cita, hora_cita, resumen)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      INSERT INTO calls (call_id, nombre, telefono, estado, razon_fin, duracion_s, cita, dia_cita, hora_cita, resumen, transcript)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
     `, [
       llamada.callId       || null,
       llamada.nombre,
@@ -21,7 +21,28 @@ export const CallsDB = {
       llamada.diaCita      || null,
       llamada.horaCita     || null,
       llamada.summary      || null,
+      llamada.transcript   || null,
     ]);
+  },
+
+  async obtenerTranscript(telefono) {
+    const { rows } = await query(
+      `SELECT nombre, telefono, transcript, resumen, llamada_en
+       FROM calls WHERE telefono = $1 AND transcript IS NOT NULL
+       ORDER BY llamada_en DESC LIMIT 1`,
+      [telefono]
+    ).catch(() => ({ rows: [] }));
+    return rows[0] || null;
+  },
+
+  async ultimasConTranscript(limite = 5) {
+    const { rows } = await query(
+      `SELECT nombre, telefono, transcript, resumen, cita, llamada_en
+       FROM calls WHERE transcript IS NOT NULL
+       ORDER BY llamada_en DESC LIMIT $1`,
+      [limite]
+    ).catch(() => ({ rows: [] }));
+    return rows;
   },
 
   async listar({ limit = 50, soloConCita = false } = {}) {

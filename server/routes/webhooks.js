@@ -733,4 +733,16 @@ Devuelve SOLO el texto del email, sin asunto, sin formato extra.`,
   res.sendStatus(200);
 });
 
+// ── Diagnóstico de configuración de Stripe webhook ────
+// GET /test/webhook-config → dice si STRIPE_WEBHOOK_SECRET está set, sin revelarlo
+router.get('/test/webhook-config', (req, res) => {
+  res.json({
+    stripe_webhook_secret: !!ENV.STRIPE_WEBHOOK_SECRET,
+    stripe_secret_key:     !!ENV.STRIPE_SECRET_KEY,
+    resend_api_key:        !!ENV.RESEND_API_KEY,
+    railway_domain:        ENV.RAILWAY_DOMAIN || null,
+    email_from:            ENV.EMAIL_FROM || null,
+  });
+});
+
 export default router;

@@ -44,7 +44,7 @@ const ESTADOS_ES = {
 // ── Resultado de llamada de Sofía a un lead ───────────
 export async function procesarResultadoSofia(callData) {
   try {
-    const { status, endedReason, duration, summary, successEval, customer, analysis } = callData;
+    const { status, endedReason, duration, summary, successEval, customer, analysis, transcript } = callData;
     const nombre   = customer?.name   || 'Lead';
     const telefono = customer?.number || '—';
     const duracion = duration ? `${Math.round(duration)}s` : '—';
@@ -56,12 +56,12 @@ export async function procesarResultadoSofia(callData) {
     const horaCita     = estructurado.horaCita || '';
     const detalleCita  = [diaCita, horaCita].filter(Boolean).join(' a las ');
 
-    // Persistir en memoria
+    // Persistir en memoria (incluyendo transcripción completa de la llamada)
     await CallsDB.registrar({
       callId: callData.id, nombre, telefono,
       estado: status, endedReason, duration,
       citaAgendada, diaCita, horaCita,
-      summary,
+      summary, transcript: transcript || null,
     });
 
     if (citaAgendada) {

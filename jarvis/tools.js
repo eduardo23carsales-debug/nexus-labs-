@@ -902,7 +902,63 @@ Incluye desglose por producto y ROI de cada campaña.
       required: ['nombre_o_id'],
     },
   },
+
+  // ── REPARAR CONTENIDO DE PRODUCTO ──────────────────
+  {
+    name: 'reparar_contenido_producto',
+    description: `Regenera y guarda el contenido del producto digital (el material que recibe el comprador) sin tocar Stripe ni crear nuevas campañas.
+Úsalo cuando Eduardo diga "el producto no tiene contenido", "el acceso da error", "regenera el contenido del producto", "el /acceso/ da 404", "arregla el producto", "el comprador no puede ver el producto".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID del producto a reparar.' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  // ── TEST DE ENTREGA DE PRODUCTO ─────────────────────
+  {
+    name: 'test_entrega_producto',
+    description: `Envía un email de prueba a Eduardo con el acceso al producto para verificar que Resend funciona y que el link de acceso lleva al producto correcto.
+Úsalo cuando Eduardo diga "prueba el email de entrega", "verifica que el email llega", "mándate el producto de prueba", "¿llega el correo de confirmación?", "testea el email", "¿funciona Resend?".`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID del producto a probar. Si no se da, usa el experimento activo más reciente.' },
+      },
+    },
+  },
 ];
+
+// ── Inferir contexto de nicho desde el nombre del producto ─
+// Usa Claude para derivar cliente_ideal, quick_win, etc. correctos
+// en vez de usar defaults genéricos que mezclan temas
+async function inferirContextoProducto(nombreProducto, nicho, tipo, precio) {
+  try {
+    const raw = await AnthropicConnector.completar({
+      model:     'claude-haiku-4-5-20251001',
+      maxTokens: 400,
+      system:    'Responde SOLO con JSON válido, sin bloques de código ni explicaciones.',
+      prompt: `Dado este producto digital para el mercado hispano en USA, infiere el contexto correcto.
+
+Nombre del producto: ${nombreProducto}
+Nicho: ${nicho}
+Precio: $${precio}
+
+Responde con este JSON exacto:
+{
+  "problema_que_resuelve": "El problema específico que resuelve en 1 oración",
+  "cliente_ideal": "Quién es el cliente ideal en 1 oración específica",
+  "quick_win": "El resultado concreto que puede lograr rápido",
+  "puntos_de_venta": ["beneficio 1", "beneficio 2", "beneficio 3", "beneficio 4"]
+}`,
+    });
+    return JSON.parse(raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
+  } catch {
+    return null;
+  }
+}
 
 // ── Parser de fechas en español ────────────────────────
 // Convierte texto libre como "mañana a las 3pm" o "el viernes a las 10am" a Date
@@ -1435,31 +1491,45 @@ export const TOOL_HANDLERS = {
       console.warn('[Relanzar] Copies fallaron, usando segmento genérico:', err.message);
     }
 
+    // Inferir contexto específico del producto para que el generador no mezcle temas
+    const ctx = await inferirContextoProducto(exp.nombre, exp.nicho || exp.nombre, exp.tipo || 'guia_pdf', exp.precio || 27);
+
     const nichoBasico = {
       nombre_producto:       exp.nombre,
       nicho:                 exp.nicho || exp.nombre,
       tipo:                  exp.tipo || 'guia_pdf',
       precio:                exp.precio || 27,
-      problema_que_resuelve: exp.nombre,
-      subtitulo:             '',
-      cliente_ideal:         'Emprendedor hispano en USA',
-      quick_win:             'Resultados desde el primer día',
-      puntos_de_venta:       [],
+      problema_que_resuelve: ctx?.problema_que_resuelve || exp.nombre,
+      subtitulo:             ctx?.quick_win || '',
+      cliente_ideal:         ctx?.cliente_ideal || 'Inmigrante hispano en USA',
+      quick_win:             ctx?.quick_win || 'Resultados desde el primer día',
+      puntos_de_venta:       ctx?.puntos_de_venta || [],
     };
 
-    // Paso 2: Stripe primero (para que la campaña apunte al link de compra)
+    // Paso 2: Stripe + contenido del producto
     let stripeInfo = null;
+    let htmlProducto = exp.contenido_producto || null;
     if (StripeConnector.disponible()) {
-      await notif(`✅ Copies listos\n\nPaso 2/3 — Publicando landing page con Stripe...`);
+      // Regenerar contenido si el experimento no lo tiene
+      if (!htmlProducto || htmlProducto.length < 500) {
+        await notif(`✅ Copies listos\n\nPaso 2/4 — Generando contenido del producto...`);
+        try {
+          htmlProducto = await generarProducto(nichoBasico);
+        } catch (err) {
+          console.warn('[Relanzar] Generar producto falló:', err.message);
+          htmlProducto = null;
+        }
+      }
+      await notif(`✅ Contenido listo\n\nPaso 3/4 — Publicando landing page con Stripe...`);
       try {
-        stripeInfo = await publicarConStripe(nichoBasico, null, exp.id);
+        stripeInfo = await publicarConStripe(nichoBasico, htmlProducto, exp.id);
       } catch (err) {
         console.warn('[Relanzar] Stripe falló:', err.message);
       }
     }
 
-    // Paso 3: Campaña Meta — tráfico directo a Stripe si existe, sino leads
-    await notif(`${stripeInfo ? '✅ Landing lista' : '⚠️ Sin Stripe'}\n\nPaso 3/3 — Lanzando campaña Meta Ads...`);
+    // Paso 4: Campaña Meta — tráfico directo a Stripe si existe, sino leads
+    await notif(`${stripeInfo ? '✅ Landing lista' : '⚠️ Sin Stripe'}\n\nPaso 4/4 — Lanzando campaña Meta Ads...`);
 
     let campaña;
     try {
@@ -2508,6 +2578,134 @@ export const TOOL_HANDLERS = {
       await notif(msg);
     }
     return `${llamadas.length} transcripción(es) mostrada(s).`;
+  },
+
+  // ── REPARAR CONTENIDO DE PRODUCTO ──────────────────
+  async reparar_contenido_producto({ nombre_o_id }) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    const id = parseInt(nombre_o_id);
+    let exp = null;
+    if (!isNaN(id)) {
+      exp = await ExperimentsDB.obtener(id);
+    } else {
+      const activos  = await ExperimentsDB.listar('activo');
+      const muertos  = await ExperimentsDB.listar('muerto');
+      const todos    = [...activos, ...muertos];
+      exp = todos.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+    }
+    if (!exp) return `No encontré producto con "${nombre_o_id}". Usa ver_experimentos para ver los disponibles.`;
+
+    await notif(
+      `🔧 <b>Reparando contenido — ${esc(exp.nombre)}</b>\n` +
+      `⏳ Generando el producto con IA... (esto puede tardar 2-3 minutos)`
+    );
+
+    // Inferir contexto específico para que el generador no mezcle temas
+    const ctx = await inferirContextoProducto(exp.nombre, exp.nicho || exp.nombre, exp.tipo || 'guia_pdf', exp.precio || 27);
+
+    const nicho = {
+      nombre_producto:       exp.nombre,
+      nicho:                 exp.nicho || exp.nombre,
+      tipo:                  exp.tipo || 'guia_pdf',
+      precio:                exp.precio || 27,
+      problema_que_resuelve: ctx?.problema_que_resuelve || exp.nombre,
+      cliente_ideal:         ctx?.cliente_ideal || 'Inmigrante hispano en USA',
+      quick_win:             ctx?.quick_win || 'Dominar el examen de ciudadanía',
+      puntos_de_venta:       ctx?.puntos_de_venta || [],
+    };
+
+    let html;
+    try {
+      html = await generarProducto(nicho);
+    } catch (err) {
+      await notif(`❌ Error generando contenido: ${err.message}`);
+      return `Error generando el contenido del producto: ${err.message}`;
+    }
+
+    const { query } = await import('../config/database.js');
+    await query(
+      `UPDATE experiments SET contenido_producto = $1, actualizado_en = NOW() WHERE id = $2`,
+      [html, exp.id]
+    );
+
+    const dominio     = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+    const accesoUrl   = exp.landing_slug ? `${dominio}/acceso/${exp.landing_slug}` : null;
+
+    await notif(
+      `✅ <b>Contenido reparado — ${esc(exp.nombre)}</b>\n` +
+      `📄 ${Math.round(html.length / 1024)} KB de contenido guardado\n` +
+      (accesoUrl ? `🔗 URL de acceso: ${accesoUrl}\n` : '') +
+      `\nYa puedes probar con "test_entrega_producto" para verificar que el email llega correctamente.`
+    );
+
+    return `Contenido de "${exp.nombre}" reparado — ${Math.round(html.length / 1024)} KB generados y guardados. ${accesoUrl ? `La URL de acceso ${accesoUrl} ya debería funcionar.` : ''}`;
+  },
+
+  // ── TEST DE ENTREGA DE PRODUCTO ────────────────────
+  async test_entrega_producto({ nombre_o_id = null } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    if (!ResendConnector.disponible()) {
+      return '⚠️ RESEND_API_KEY no configurado en Railway. El email de entrega no puede enviarse.';
+    }
+
+    // Encontrar el experimento
+    let exp = null;
+    if (nombre_o_id) {
+      const id = parseInt(nombre_o_id);
+      if (!isNaN(id)) {
+        exp = await ExperimentsDB.obtener(id);
+      } else {
+        const lista = await ExperimentsDB.listar('activo');
+        exp = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+      }
+    }
+    if (!exp) {
+      const activos = await ExperimentsDB.listar('activo');
+      exp = activos.find(e => e.contenido_producto || e.landing_slug) || activos[0];
+    }
+    if (!exp) {
+      return 'No hay experimentos activos con producto para probar. Crea un producto primero con pipeline_completo.';
+    }
+
+    const dominio    = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
+    const productoUrl = exp.landing_slug ? `${dominio}/acceso/${exp.landing_slug}` : exp.producto_url || null;
+    const emailDestino = ENV.EDUARDO_EMAIL || 'eduardo23carsales@gmail.com';
+
+    await notif(
+      `🧪 <b>Test de entrega iniciado</b>\n` +
+      `📦 Producto: ${exp.nombre}\n` +
+      `📧 Destino: ${emailDestino}\n` +
+      `🔗 URL acceso: ${productoUrl || '(sin URL)'}\n` +
+      `⏳ Enviando...`
+    );
+
+    try {
+      await ResendConnector.entregarProducto({
+        para:            emailDestino,
+        nombreCliente:   'Eduardo (TEST)',
+        nombreProducto:  exp.nombre,
+        contenido:       exp.contenido_producto || '',
+        productoUrl,
+        stripePaymentId: 'TEST_' + Date.now(),
+      });
+
+      const msg =
+        `✅ <b>Email de prueba enviado</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📦 Producto: ${exp.nombre}\n` +
+        `📧 Enviado a: ${emailDestino}\n` +
+        `🔗 Link de acceso en el email: ${productoUrl || '(sin link — solo contenido)'}\n\n` +
+        `Revisa tu bandeja de entrada (o spam). Si el email llegó → Resend está funcionando.\n` +
+        `Si el link abre el producto → el pipeline completo está operativo.`;
+
+      await notif(msg);
+      return `Email de prueba enviado a ${emailDestino}. Revisa tu bandeja de entrada para confirmar que llegó con el link de acceso a "${exp.nombre}".`;
+    } catch (err) {
+      await notif(`❌ <b>Error en test de entrega</b>\n<code>${err.message}</code>`);
+      return `Error enviando email de prueba: ${err.message}`;
+    }
   },
 
   // ── P&L REPORT ─────────────────────────────────────

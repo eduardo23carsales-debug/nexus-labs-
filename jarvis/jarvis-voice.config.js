@@ -735,6 +735,29 @@ const FUNCIONES_VAPI = [
       required: ['nombre_o_id'],
     },
   },
+
+  {
+    name:        'reparar_contenido_producto',
+    description: 'Regenera y guarda el contenido del producto (lo que ve el comprador) sin tocar Stripe ni campañas. Úsalo cuando Eduardo dice "el acceso da error", "regenera el contenido", "el /acceso/ da 404", "arregla el producto".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID del producto a reparar.' },
+      },
+      required: ['nombre_o_id'],
+    },
+  },
+
+  {
+    name:        'test_entrega_producto',
+    description: 'Envía un email de prueba a Eduardo con el acceso al producto para verificar que el pipeline de entrega funciona. Úsalo cuando Eduardo dice "prueba el email de entrega", "mándate el producto de prueba", "¿funciona Resend?", "testea el email".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre_o_id: { type: 'string', description: 'Nombre parcial o ID del producto a probar. Opcional — si no se da, usa el activo más reciente.' },
+      },
+    },
+  },
 ];
 
 // ── Config completa de VAPI ───────────────────────────
