@@ -252,18 +252,47 @@ export async function publicarConStripe(nicho, htmlProducto, experimentoId = nul
     throw new Error('STRIPE_SECRET_KEY no configurado — agrega la variable en Railway');
   }
 
-  await notif('💳 Creando producto en Stripe...');
+  // Reusar Stripe si el experimento ya tiene uno — evita duplicados en cada relaunch
+  let stripeData = null;
+  if (experimentoId) {
+    const { rows } = await query(
+      `SELECT stripe_product_id, stripe_price_id, stripe_payment_link, landing_slug FROM experiments WHERE id = $1`,
+      [experimentoId]
+    ).catch(() => ({ rows: [] }));
+    const exp = rows[0];
+    if (exp?.stripe_payment_link && exp?.landing_slug) {
+      stripeData = {
+        stripe_product_id:   exp.stripe_product_id,
+        stripe_price_id:     exp.stripe_price_id,
+        stripe_payment_link: exp.stripe_payment_link,
+      };
+      console.log(`[Publisher] Reusando Stripe existente para experimento #${experimentoId}`);
+    }
+  }
 
-  const stripeData = await StripeConnector.crearProductoCompleto({
-    nombre:      nicho.nombre_producto,
-    descripcion: nicho.problema_que_resuelve || nicho.subtitulo || '',
-    precio:      nicho.precio,
-  });
+  if (!stripeData) {
+    await notif('💳 Creando producto en Stripe...');
+    stripeData = await StripeConnector.crearProductoCompleto({
+      nombre:      nicho.nombre_producto,
+      descripcion: nicho.problema_que_resuelve || nicho.subtitulo || '',
+      precio:      nicho.precio,
+    });
+  }
 
   await notif('🎨 Generando landing page de ventas...');
   const landingHTML = await generarLandingHTML(nicho, stripeData.stripe_payment_link);
 
-  const slug = generarSlug(nicho.nombre_producto);
+  // Reusar slug existente si el experimento ya tiene uno (mantiene la URL estable)
+  let slug = null;
+  if (experimentoId) {
+    const { rows } = await query(
+      `SELECT landing_slug FROM experiments WHERE id = $1`,
+      [experimentoId]
+    ).catch(() => ({ rows: [] }));
+    slug = rows[0]?.landing_slug || null;
+  }
+  if (!slug) slug = generarSlug(nicho.nombre_producto);
+
   const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
   const landingUrl = `${dominio}/p/${slug}`;
 
