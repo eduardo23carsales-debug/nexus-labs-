@@ -307,7 +307,8 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
   }
 
   if (ads.length === 0) {
-    throw new Error(`Campaña creada (${campana.id}) pero ningún ad se pudo crear. Revisa los logs de adsets.`);
+    await MetaConnector.post(`/${campana.id}`, { status: 'PAUSED' }).catch(() => {});
+    throw new Error(`Campaña creada (${campana.id}) pero ningún ad se pudo crear — campaña pausada automáticamente. Revisa los logs de adsets.`);
   }
 
   console.log(`[AdsEngine] Campaña lista: ${ads.length}/${seg.copies.length} ads creados`);
@@ -408,6 +409,12 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
     } catch (err) {
       console.error(`[AdsEngine] Error en copy ${copy.tipo}:`, err.message);
     }
+  }
+
+  // Si ningún ad se creó, la campaña quedó vacía — limpiar y avisar
+  if (ads.length === 0) {
+    await MetaConnector.post(`/${campana.id}`, { status: 'PAUSED' }).catch(() => {});
+    throw new Error(`Campaña creada pero sin anuncios — todos los copies fallaron. Campaña ${campana.id} pausada para evitar gasto. Reintenta con relanzar_producto.`);
   }
 
   return { campaign_id: campana.id, segmento, nombre, url_destino: urlDestino, asset_tipo: assetTipo, ads };
