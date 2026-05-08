@@ -7,7 +7,7 @@ import { llamarConContexto }                    from '../call_agent/context-call
 import { procesarLead }                         from '../lead_system/capture.js';
 import { ejecutarAnalista }                     from '../agents/analista/index.js';
 import { ejecutarSupervisor }                   from '../agents/supervisor/index.js';
-import { crearCampana, crearCampañaTrafico, generarYSubirImagen, generarCopiesParaProducto } from '../ads_engine/campaign-creator.js';
+import { crearCampana, crearCampañaTrafico, generarYSubirImagen, generarCopiesParaProducto, generarSlideshowParaCampana } from '../ads_engine/campaign-creator.js';
 import { CampaignManager }                      from '../ads_engine/campaign-manager.js';
 import { MetaConnector }                        from '../connectors/meta.connector.js';
 import { TelegramConnector, esc }               from '../connectors/telegram.connector.js';
@@ -189,6 +189,8 @@ Segmentos disponibles: emprendedor-principiante, emprendedor-escalar, afiliado-h
       properties: {
         segmento:    { type: 'string', description: 'Uno de: emprendedor-principiante, emprendedor-escalar, afiliado-hotmart, infoproductor, oferta-especial' },
         presupuesto: { type: 'number', description: 'Presupuesto diario en USD' },
+        slideshow:   { type: 'boolean', description: 'Si true, genera un video slideshow con 5 imágenes DALL-E en vez de foto estática. Requiere nombre_producto.' },
+        nombre_producto: { type: 'string', description: 'Nombre del producto (requerido si slideshow: true)' },
       },
       required: ['segmento', 'presupuesto'],
     },
@@ -203,11 +205,37 @@ Ideal cuando ya tienes un link de Hotmart o landing page listo.
     input_schema: {
       type: 'object',
       properties: {
-        segmento:     { type: 'string', description: 'Uno de: emprendedor-principiante, emprendedor-escalar, afiliado-hotmart, infoproductor, oferta-especial' },
-        url_destino:  { type: 'string', description: 'URL de la página de venta (Hotmart checkout, landing page, etc.)' },
-        presupuesto:  { type: 'number', description: 'Presupuesto diario en USD' },
+        segmento:        { type: 'string', description: 'Uno de: emprendedor-principiante, emprendedor-escalar, afiliado-hotmart, infoproductor, oferta-especial' },
+        url_destino:     { type: 'string', description: 'URL de la página de venta (Hotmart checkout, landing page, etc.)' },
+        presupuesto:     { type: 'number', description: 'Presupuesto diario en USD' },
+        slideshow:       { type: 'boolean', description: 'Si true, genera un video slideshow con 5 imágenes DALL-E. Requiere nombre_producto.' },
+        nombre_producto: { type: 'string', description: 'Nombre del producto (requerido si slideshow: true)' },
       },
       required: ['segmento', 'url_destino', 'presupuesto'],
+    },
+  },
+
+  {
+    name: 'lanzar_campana_slideshow',
+    description: `Crea una campaña de Meta Ads con VIDEO SLIDESHOW automático.
+DALL-E genera 5 imágenes distintas del producto → Meta las convierte en un video de 10 segundos → se lanza como ad.
+Los slideshows tienen mucho mejor performance que fotos estáticas: más reach, mejor CTR, más barato.
+Úsalo cuando Eduardo diga:
+- "lanza con slideshow"
+- "crea ads con video"
+- "quiero video en vez de foto"
+- "haz un slideshow para el producto X"
+Funciona tanto para lead gen (formulario) como para tráfico a URL.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_producto: { type: 'string', description: 'Nombre del producto para generar imágenes relevantes' },
+        segmento:        { type: 'string', description: 'Segmento de audiencia. Default: emprendedor-principiante' },
+        presupuesto:     { type: 'number', description: 'Presupuesto diario en USD. Default: 10' },
+        url_destino:     { type: 'string', description: 'URL de venta. Si se da, campaña de tráfico. Si no, campaña de leads con formulario.' },
+        nicho:           { type: 'string', description: 'Nicho del producto para personalizar las imágenes' },
+      },
+      required: ['nombre_producto'],
     },
   },
 
@@ -1349,14 +1377,55 @@ export const TOOL_HANDLERS = {
     return `Landing creada para "${datos.nombre_negocio}". Archivo: ${resultado.url_relativa}`;
   },
 
-  async crear_campana_ads({ segmento, presupuesto }) {
-    const resultado = await crearCampana(segmento, presupuesto);
-    return `Campaña de leads creada para "${segmento}" con $${presupuesto}/día. ID: ${resultado.campaign_id}. Los leads llegarán al CRM automáticamente.`;
+  async crear_campana_ads({ segmento, presupuesto, slideshow = false, nombre_producto = null }) {
+    const opts = { slideshow, nombreProducto: nombre_producto, nicho: segmento };
+    const resultado = await crearCampana(segmento, presupuesto, opts);
+    const tipo = slideshow ? '(video slideshow)' : '(imagen)';
+    return `Campaña de leads creada ${tipo} para "${segmento}" con $${presupuesto}/día. ID: ${resultado.campaign_id}. Los leads llegarán al CRM automáticamente.`;
   },
 
-  async lanzar_campana_producto({ segmento, url_destino, presupuesto }) {
-    const resultado = await crearCampañaTrafico(segmento, url_destino, presupuesto);
-    return `Campaña de tráfico creada para "${segmento}" con $${presupuesto}/día.\nDestino: ${url_destino}\nID: ${resultado.campaign_id}\n${resultado.ads.length} ads activos.`;
+  async lanzar_campana_producto({ segmento, url_destino, presupuesto, slideshow = false, nombre_producto = null }) {
+    const opts = { slideshow, nombreProducto: nombre_producto, nicho: segmento };
+    const resultado = await crearCampañaTrafico(segmento, url_destino, presupuesto, opts);
+    const tipo = slideshow ? '(video slideshow)' : '(imagen)';
+    return `Campaña de tráfico ${tipo} creada para "${segmento}" con $${presupuesto}/día.\nDestino: ${url_destino}\nID: ${resultado.campaign_id}\n${resultado.ads.length} ads activos.`;
+  },
+
+  async lanzar_campana_slideshow({ nombre_producto, segmento = 'emprendedor-principiante', presupuesto = 10, url_destino = null, nicho = null }) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    await notif(
+      `🎬 <b>Generando Slideshow Video</b>\n` +
+      `📦 Producto: ${esc(nombre_producto)}\n` +
+      `🎨 Generando 5 imágenes con DALL-E...\n` +
+      `⏳ Esto tarda ~2 minutos`
+    );
+
+    const opts = { slideshow: true, nombreProducto: nombre_producto, nicho: nicho || segmento };
+    let resultado;
+    if (url_destino) {
+      resultado = await crearCampañaTrafico(segmento, url_destino, presupuesto, opts);
+    } else {
+      resultado = await crearCampana(segmento, presupuesto, opts);
+    }
+
+    await LearningsDB.guardar({
+      tipo: 'campana', contexto: `Slideshow lanzado: ${nombre_producto}`,
+      accion: `lanzar_campana_slideshow $${presupuesto}/día — ${segmento}`,
+      resultado: `Campaign ID: ${resultado.campaign_id}, ${resultado.ads.length} ads`,
+      exito: true, tags: ['meta', 'slideshow', 'video'], relevancia: 7,
+    }).catch(() => {});
+
+    await notif(
+      `✅ <b>Campaña Slideshow Activa</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📦 ${esc(nombre_producto)}\n` +
+      `🎬 5 imágenes → video slideshow 10s\n` +
+      `💰 $${presupuesto}/día | ${resultado.ads.length} ads activos\n` +
+      `🆔 Campaign: ${resultado.campaign_id}\n` +
+      (url_destino ? `🔗 Destino: ${url_destino}` : `📋 Tipo: Lead Gen (formulario nativo)`)
+    );
+
+    return `Campaña slideshow "${nombre_producto}" lanzada con $${presupuesto}/día. ${resultado.ads.length} ads activos. ID: ${resultado.campaign_id}.`;
   },
 
   async pausar_campana({ nombre_o_id }) {

@@ -759,6 +759,22 @@ const FUNCIONES_VAPI = [
     },
   },
 
+  // ── SLIDESHOW (voz) ───────────────────────────────
+  {
+    name:        'lanzar_campana_slideshow',
+    description: 'Crea una campaña Meta Ads con video slideshow automático: DALL-E genera 5 imágenes y Meta las convierte en video. Úsalo cuando Eduardo dice "lanza con slideshow", "crea ads con video", "quiero video en vez de foto", "haz un slideshow para X".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre_producto: { type: 'string', description: 'Nombre del producto' },
+        segmento:        { type: 'string', description: 'Segmento Meta. Default: emprendedor-principiante' },
+        presupuesto:     { type: 'number', description: 'Presupuesto diario USD. Default: 10' },
+        url_destino:     { type: 'string', description: 'URL de venta. Si no se da, usa formulario de leads.' },
+      },
+      required: ['nombre_producto'],
+    },
+  },
+
   // ── BIBLIOTECA, AUDIENCIAS Y ESCALADO META (voz) ──
   {
     name:        'ver_biblioteca_meta',

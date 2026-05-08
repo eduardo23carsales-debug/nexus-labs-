@@ -118,6 +118,40 @@ Respond with ONLY the image prompt, no labels or explanation:`,
   return prompt.trim();
 }
 
+// ── Generar slideshow: N imágenes DALL-E → video Meta ───────────────────────
+// Genera imágenes distintas del producto, las sube y crea el slideshow en Meta
+export async function generarSlideshowParaCampana(nombreProducto, nicho, seg, nImagenes = 5) {
+  const estilos = ['aspirational', 'professional', 'dynamic', 'lifestyle', 'results-focused'];
+  const urls    = [];
+
+  for (let i = 0; i < nImagenes; i++) {
+    try {
+      const estilo = estilos[i % estilos.length];
+      const prompt = await AnthropicConnector.completar({
+        model:     'claude-haiku-4-5-20251001',
+        maxTokens: 100,
+        prompt: `Create a DALL-E 3 prompt for slide ${i + 1} of ${nImagenes} in a Meta Ads slideshow video.
+Product: "${nombreProducto}"
+Niche: ${nicho}
+Visual style: ${estilo}
+Rules: NO faces, NO hands, NO text, NO logos. Objects, environments, symbolic scenes only. Photorealistic, cinematic lighting. Each slide must look DIFFERENT from the others.
+Respond with ONLY the prompt, no labels:`,
+      });
+      const url = await OpenAIConnector.generarImagen({ prompt: prompt.trim() });
+      urls.push(url);
+      console.log(`[AdsEngine] Slide ${i + 1}/${nImagenes} generado`);
+    } catch (err) {
+      console.warn(`[AdsEngine] Slide ${i + 1} falló:`, err.message);
+    }
+  }
+
+  if (urls.length < 3) throw new Error(`Solo se generaron ${urls.length} imágenes — mínimo 3 para slideshow`);
+
+  const videoId = await MetaConnector.crearSlideshowDesdeUrls(urls, { duracionMs: 2000, transicion: 'FADE' });
+  console.log(`[AdsEngine] Slideshow creado: video ID ${videoId} (${urls.length} slides)`);
+  return { videoId, nSlides: urls.length, imageUrls: urls };
+}
+
 // ── Generar imagen, validar con Claude Vision (base64), reintentar si calidad baja ──
 async function generarImagenValidada(promptBase, contexto, maxIntentos = 3) {
   let prompt   = promptBase;
@@ -195,7 +229,7 @@ async function crearFormulario(segmento, stripeUrl = null) {
 
 // ── CREAR CAMPAÑA COMPLETA ────────────────────────────
 // imagenHash opcional: si se pasa, usa esa imagen en vez de buscar/generar una
-export async function crearCampana(segmento, presupuestoDia, { imagenHash, copies, stripeUrl, nombreProducto, nicho } = {}) {
+export async function crearCampana(segmento, presupuestoDia, { imagenHash, copies, stripeUrl, nombreProducto, nicho, slideshow = false } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
 
@@ -230,7 +264,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
     bid_strategy:          'LOWEST_COST_WITHOUT_CAP',
   });
 
-  // 2. Asset (imagen override > video > foto > DALL-E único por copy)
+  // 2. Asset — prioridad: imagenHash override > slideshow > video local > foto local > DALL-E por copy
   let assetTipo, assetIdFijo = null;
   const videoPath = buscarVideo(segmento);
   const fotoPath  = buscarFoto(segmento);
@@ -238,6 +272,12 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
   if (imagenHash) {
     assetTipo   = 'imagen';
     assetIdFijo = imagenHash;
+  } else if (slideshow && nombreProducto) {
+    console.log('[AdsEngine] Generando slideshow video...');
+    const sl    = await generarSlideshowParaCampana(nombreProducto, nicho || seg.nombre, seg);
+    assetTipo   = 'video';
+    assetIdFijo = sl.videoId;
+    console.log(`[AdsEngine] Slideshow listo (${sl.nSlides} slides → video ${sl.videoId})`);
   } else if (videoPath) {
     assetTipo   = 'video';
     assetIdFijo = await subirVideoLocal(videoPath);
@@ -324,7 +364,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
 }
 
 // ── CAMPAÑA DE TRÁFICO A URL (para Hotmart / landing page) ──
-export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies, nombreProducto, nicho } = {}) {
+export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies, nombreProducto, nicho, slideshow = false } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
   if (!urlDestino) throw new Error('urlDestino es requerido para campañas de tráfico');
@@ -344,12 +384,18 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
     bid_strategy:          'LOWEST_COST_WITHOUT_CAP',
   });
 
-  // 2. Asset (video > foto > DALL-E único por copy)
+  // 2. Asset — prioridad: slideshow > video local > foto local > DALL-E por copy
   let assetTipo, assetIdFijo = null;
   const videoPath = buscarVideo(segmento);
   const fotoPath  = buscarFoto(segmento);
 
-  if (videoPath) {
+  if (slideshow && nombreProducto) {
+    console.log('[AdsEngine] Generando slideshow video...');
+    const sl    = await generarSlideshowParaCampana(nombreProducto, nicho || seg.nombre, seg);
+    assetTipo   = 'video';
+    assetIdFijo = sl.videoId;
+    console.log(`[AdsEngine] Slideshow listo (${sl.nSlides} slides → video ${sl.videoId})`);
+  } else if (videoPath) {
     assetTipo   = 'video';
     assetIdFijo = await subirVideoLocal(videoPath);
   } else if (fotoPath) {

@@ -391,6 +391,22 @@ export const MetaConnector = {
     }
   },
 
+  // ── SLIDESHOW VIDEO ────────────────────────────────
+
+  // Crea un video slideshow en Meta a partir de URLs de imágenes
+  // Meta combina las imágenes en un video listo para usar en ads
+  async crearSlideshowDesdeUrls(imageUrls, { duracionMs = 2000, transicion = 'FADE' } = {}) {
+    const data = await this.post(`/${adAccount()}/advideos`, {
+      slideshow_spec: JSON.stringify({
+        images_urls:  imageUrls,
+        duration_ms:  duracionMs,
+        transition:   transicion,
+      }),
+    });
+    if (!data.id) throw new Error('Meta no retornó ID del slideshow video');
+    return data.id;
+  },
+
   // ── BIBLIOTECA DE CREATIVOS ────────────────────────
 
   // Biblioteca de videos subidos a la cuenta de Meta
