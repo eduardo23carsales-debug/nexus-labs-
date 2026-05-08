@@ -391,6 +391,246 @@ export const MetaConnector = {
     }
   },
 
+  // ── BIBLIOTECA DE CREATIVOS ────────────────────────
+
+  // Biblioteca de videos subidos a la cuenta de Meta
+  async getVideoLibrary(limite = 25) {
+    try {
+      const data = await this.get(`/${adAccount()}/advideos`, {
+        fields: 'id,title,description,length,picture,created_time,status',
+        limit:  limite,
+      });
+      return (data.data || []).map(v => ({
+        id:          v.id,
+        titulo:      v.title || '(sin título)',
+        descripcion: v.description || '',
+        duracion_s:  v.length || 0,
+        thumbnail:   v.picture || null,
+        estado:      v.status?.processing_progress === 100 ? 'listo' : 'procesando',
+        creado_en:   v.created_time,
+      }));
+    } catch (err) {
+      console.warn('[Meta] Error getVideoLibrary:', err.message);
+      return [];
+    }
+  },
+
+  // Biblioteca de imágenes subidas a la cuenta
+  async getImageLibrary(limite = 25) {
+    try {
+      const data = await this.get(`/${adAccount()}/adimages`, {
+        fields: 'hash,name,url,width,height,created_time,status',
+        limit:  limite,
+      });
+      return (data.data || []).map(img => ({
+        hash:      img.hash,
+        nombre:    img.name || '(sin nombre)',
+        url:       img.url,
+        ancho:     img.width,
+        alto:      img.height,
+        estado:    img.status || 'active',
+        creado_en: img.created_time,
+      }));
+    } catch (err) {
+      console.warn('[Meta] Error getImageLibrary:', err.message);
+      return [];
+    }
+  },
+
+  // Métricas específicas de video: vistas 3s, tasa completado, ThruPlay, etc.
+  async getMetricasVideo(campanaId, datePreset = 'last_7d') {
+    try {
+      const data = await this.get(`/${campanaId}/insights`, {
+        date_preset: datePreset,
+        level:       'ad',
+        fields: [
+          'ad_id,ad_name,spend,impressions,reach',
+          'video_play_actions',
+          'video_avg_time_watched_actions',
+          'video_p25_watched_actions',
+          'video_p50_watched_actions',
+          'video_p75_watched_actions',
+          'video_p100_watched_actions',
+          'video_thruplay_watched_actions',
+        ].join(','),
+        limit: 50,
+      });
+
+      const val = (actions, type) =>
+        parseInt(actions?.find(a => a.action_type === type)?.value || 0);
+
+      return (data.data || []).map(row => {
+        const plays      = val(row.video_play_actions, 'video_view');
+        const thruplay   = val(row.video_thruplay_watched_actions, 'video_view');
+        const p25        = val(row.video_p25_watched_actions, 'video_view');
+        const p50        = val(row.video_p50_watched_actions, 'video_view');
+        const p75        = val(row.video_p75_watched_actions, 'video_view');
+        const p100       = val(row.video_p100_watched_actions, 'video_view');
+        const spend      = parseFloat(row.spend || 0);
+        return {
+          ad_id:              row.ad_id,
+          ad_nombre:          row.ad_name,
+          spend,
+          impressions:        parseInt(row.impressions || 0),
+          reach:              parseInt(row.reach || 0),
+          vistas_3s:          plays,
+          thruplay,
+          p25, p50, p75, p100,
+          tasa_completado:    plays > 0 ? +((p100 / plays) * 100).toFixed(1) : 0,
+          tasa_p50:           plays > 0 ? +((p50 / plays) * 100).toFixed(1) : 0,
+          costo_por_vista:    plays > 0 ? +(spend / plays).toFixed(3) : null,
+          costo_thruplay:     thruplay > 0 ? +(spend / thruplay).toFixed(2) : null,
+        };
+      });
+    } catch (err) {
+      console.warn('[Meta] Error getMetricasVideo:', err.message);
+      return [];
+    }
+  },
+
+  // ── AUDIENCIAS ──────────────────────────────────────
+
+  // Listar audiencias personalizadas de la cuenta
+  async getAudiencias() {
+    try {
+      const data = await this.get(`/${adAccount()}/customaudiences`, {
+        fields: 'id,name,description,subtype,approximate_count_lower_bound,approximate_count_upper_bound,delivery_status,operation_status,time_created',
+        limit:  50,
+      });
+      return (data.data || []).map(a => ({
+        id:          a.id,
+        nombre:      a.name,
+        tipo:        a.subtype,
+        descripcion: a.description || '',
+        tamano_min:  a.approximate_count_lower_bound || 0,
+        tamano_max:  a.approximate_count_upper_bound || 0,
+        estado:      a.delivery_status?.code === 200 ? 'lista' : a.operation_status?.status || 'procesando',
+        creada_en:   a.time_created,
+      }));
+    } catch (err) {
+      console.warn('[Meta] Error getAudiencias:', err.message);
+      return [];
+    }
+  },
+
+  // Crear audiencia lookalike desde una fuente (compradores, leads, etc.)
+  async crearLookalike({ sourceAudienceId, pais = 'US', ratio = 0.01, nombre }) {
+    try {
+      const data = await this.post(`/${adAccount()}/customaudiences`, {
+        name:              nombre || `Lookalike ${ratio * 100}% — ${new Date().toLocaleDateString()}`,
+        subtype:           'LOOKALIKE',
+        origin_audience_id: sourceAudienceId,
+        lookalike_spec:    JSON.stringify({
+          type:    'custom_ratio',
+          ratio:   ratio,
+          country: pais,
+        }),
+      });
+      return { ok: true, id: data.id, nombre: data.name };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  },
+
+  // Crear audiencia de retargeting (visitantes del píxel en X días)
+  async crearAudienciaRetargeting({ dias = 30, nombre, pixelId }) {
+    try {
+      const pid = pixelId || ENV.META_PIXEL_ID;
+      const data = await this.post(`/${adAccount()}/customaudiences`, {
+        name:             nombre || `Retargeting visitantes ${dias}d — ${new Date().toLocaleDateString()}`,
+        subtype:          'WEBSITE',
+        retention_days:   dias,
+        rule:             JSON.stringify({
+          inclusions: {
+            operator: 'or',
+            rules: [{
+              event_sources: [{ id: pid, type: 'pixel' }],
+              retention_seconds: dias * 86400,
+              filter: { operator: 'and', filters: [{ field: 'event', operator: 'eq', value: 'ViewContent' }] },
+            }],
+          },
+        }),
+      });
+      return { ok: true, id: data.id, nombre: data.name };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  },
+
+  // ── ESCALADO INTELIGENTE ────────────────────────────
+
+  // Duplicar un adset ganador con nuevo presupuesto
+  async duplicarAdSet(adsetId, nuevoPResupuesto) {
+    try {
+      const data = await this.post(`/${adsetId}/copies`, {
+        campaign_id:  null,
+        deep_copy:    true,
+        daily_budget: Math.round(nuevoPResupuesto * 100),
+        status_option: 'ACTIVE',
+      });
+      return { ok: true, nuevo_id: data.copied_adset_id || data.id };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  },
+
+  // Breakdown geográfico — qué estado o región convierte mejor
+  async getBreakdownGeografico(campanaId, datePreset = 'last_7d') {
+    try {
+      const data = await this.get(`/${campanaId}/insights`, {
+        date_preset: datePreset,
+        fields:      'spend,clicks,impressions,actions,ctr',
+        breakdowns:  'region',
+        limit:       50,
+      });
+      return (data.data || []).map(row => {
+        const actions = row.actions || [];
+        const leads   = parseInt(actions.find(a => a.action_type === 'lead')?.value || 0);
+        const visitas = parseInt(actions.find(a => a.action_type === 'landing_page_view')?.value || 0);
+        const compras = parseInt(actions.find(a => a.action_type === 'purchase')?.value || 0);
+        const conv    = leads > 0 ? leads : (compras > 0 ? compras : visitas);
+        const spend   = parseFloat(row.spend || 0);
+        return {
+          region:      row.region,
+          spend,
+          leads, compras, visitas_landing: visitas, conversiones: conv,
+          clicks:      parseInt(row.clicks || 0),
+          impressions: parseInt(row.impressions || 0),
+          cpl:         conv > 0 ? +(spend / conv).toFixed(2) : null,
+          ctr:         parseFloat(row.ctr || 0),
+        };
+      });
+    } catch (err) {
+      console.warn('[Meta] Error getBreakdownGeografico:', err.message);
+      return [];
+    }
+  },
+
+  // Comparar dos períodos — tendencia CPL, spend, leads
+  async compararPeriodos(campanaId, preset1 = 'last_7d', preset2 = 'last_14d') {
+    try {
+      const [p1, p2] = await Promise.all([
+        this.getMetricas(campanaId, preset1),
+        this.getMetricas(campanaId, preset2),
+      ]);
+      const delta = (a, b) => b > 0 ? +(((a - b) / b) * 100).toFixed(1) : null;
+      return {
+        periodo_reciente:  { preset: preset1, ...p1 },
+        periodo_anterior:  { preset: preset2, ...p2 },
+        cambio_spend_pct:  delta(p1.spend, p2.spend),
+        cambio_cpl_pct:    p1.cpl && p2.cpl ? delta(p1.cpl, p2.cpl) : null,
+        cambio_leads_pct:  delta(p1.leads, p2.leads),
+        cambio_ctr_pct:    delta(p1.ctr, p2.ctr),
+        tendencia:         p1.cpl && p2.cpl
+          ? (p1.cpl < p2.cpl ? 'mejorando' : p1.cpl > p2.cpl ? 'empeorando' : 'estable')
+          : 'sin_datos',
+      };
+    } catch (err) {
+      console.warn('[Meta] Error compararPeriodos:', err.message);
+      return null;
+    }
+  },
+
   // Enviar evento a Conversions API (CAPI)
   async enviarEventoCAPI(evento) {
     const { nombre_evento, email, telefono, valor, moneda = 'USD', event_id } = evento;

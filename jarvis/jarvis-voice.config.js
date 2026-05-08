@@ -759,6 +759,55 @@ const FUNCIONES_VAPI = [
     },
   },
 
+  // ── BIBLIOTECA, AUDIENCIAS Y ESCALADO META (voz) ──
+  {
+    name:        'ver_biblioteca_meta',
+    description: 'Muestra videos e imágenes subidos a Meta Ads. Úsalo cuando Eduardo dice "¿qué videos tengo en Meta?", "muéstrame los creativos subidos", "ver biblioteca de videos".',
+    parameters: { type: 'object', properties: { tipo: { type: 'string', enum: ['videos', 'imagenes', 'ambos'] } } },
+  },
+
+  {
+    name:        'metricas_video',
+    description: 'Métricas de video ads: vistas 3 segundos, tasa de completado, ThruPlay y costo por vista. Úsalo cuando Eduardo dice "¿cuántos ven el video completo?", "tasa de completado", "¿qué tan bien va el video?".',
+    parameters: { type: 'object', properties: { campana: { type: 'string' }, periodo: { type: 'string' } } },
+  },
+
+  {
+    name:        'ver_audiencias',
+    description: 'Muestra todas las audiencias personalizadas: lookalikes, retargeting, listas de compradores. Úsalo cuando Eduardo dice "¿qué audiencias tenemos?", "¿hay lookalike?", "muéstrame las audiencias".',
+    parameters: { type: 'object', properties: {} },
+  },
+
+  {
+    name:        'crear_audiencia_lookalike',
+    description: 'Crea lookalike de compradores o leads para escalar a personas similares. Úsalo cuando Eduardo dice "crea lookalike de compradores", "busca gente similar a los que compraron", "escala con lookalike".',
+    parameters: { type: 'object', properties: { fuente: { type: 'string' }, ratio: { type: 'number' }, pais: { type: 'string' } } },
+  },
+
+  {
+    name:        'crear_retargeting',
+    description: 'Crea audiencia de visitantes que no compraron para remarketing. Úsalo cuando Eduardo dice "crea retargeting", "apunta a los que visitaron la landing", "quiero hacer remarketing".',
+    parameters: { type: 'object', properties: { dias: { type: 'number' } } },
+  },
+
+  {
+    name:        'duplicar_adset_ganador',
+    description: 'Duplica el adset con mejor CPL y lo lanza con más presupuesto. Úsalo cuando Eduardo dice "duplica el mejor adset", "escala el segmento que más convierte", "dobla el que funciona".',
+    parameters: { type: 'object', properties: { campana: { type: 'string' }, presupuesto: { type: 'number' }, periodo: { type: 'string' } } },
+  },
+
+  {
+    name:        'breakdown_geografico',
+    description: 'Qué estados o regiones de USA convierten mejor y cuáles queman dinero. Úsalo cuando Eduardo dice "¿qué estado convierte más?", "¿dónde están los mejores leads?", "breakdown por estado".',
+    parameters: { type: 'object', properties: { campana: { type: 'string' }, periodo: { type: 'string' } } },
+  },
+
+  {
+    name:        'tendencia_campana',
+    description: 'Compara esta semana vs la semana pasada: si el CPL sube o baja, si los leads aumentan. Úsalo cuando Eduardo dice "¿está mejorando?", "¿el CPL subió?", "tendencia vs semana pasada".',
+    parameters: { type: 'object', properties: { campana: { type: 'string' } } },
+  },
+
   // ── INTELIGENCIA META ADS (voz) ───────────────────
   {
     name:        'diagnostico_meta',

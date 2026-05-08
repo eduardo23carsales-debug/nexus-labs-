@@ -930,6 +930,138 @@ Incluye desglose por producto y ROI de cada campaña.
     },
   },
 
+  // ── BIBLIOTECA DE CREATIVOS Y AUDIENCIAS META ─────
+  {
+    name: 'ver_biblioteca_meta',
+    description: `Muestra la biblioteca de videos e imágenes subidos a Meta Ads.
+Úsalo cuando Eduardo diga:
+- "¿qué videos tengo en Meta?"
+- "muéstrame los creativos subidos"
+- "¿qué imágenes hay en la cuenta?"
+- "ver biblioteca de creativos"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', description: 'videos, imagenes, o ambos (default: ambos)', enum: ['videos', 'imagenes', 'ambos'] },
+      },
+    },
+  },
+
+  {
+    name: 'metricas_video',
+    description: `Métricas específicas de video ads: vistas de 3 segundos, tasa de completado al 25%/50%/75%/100%, ThruPlay y costo por vista.
+Úsalo cuando Eduardo diga:
+- "¿cuántos ven el video completo?"
+- "¿qué tan bien está funcionando el video?"
+- "tasa de completado de los videos"
+- "cuánto cuesta una vista de video"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial o ID de la campaña. Si no se da, usa la de mayor gasto.' },
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d', enum: ['last_7d', 'last_14d', 'last_30d'] },
+      },
+    },
+  },
+
+  {
+    name: 'ver_audiencias',
+    description: `Muestra todas las audiencias personalizadas de la cuenta Meta: compradores, visitantes, lookalikes.
+Úsalo cuando Eduardo diga:
+- "¿qué audiencias tenemos?"
+- "muéstrame las audiencias"
+- "¿tenemos lookalike?"
+- "¿hay audiencias de retargeting?"`,
+    input_schema: { type: 'object', properties: {} },
+  },
+
+  {
+    name: 'crear_audiencia_lookalike',
+    description: `Crea una audiencia lookalike en Meta a partir de los compradores reales (Pixel Purchase) o leads existentes.
+Es la herramienta más poderosa para escalar — Meta busca personas iguales a los que ya compraron.
+Úsalo cuando Eduardo diga:
+- "crea lookalike de compradores"
+- "busca audiencias similares a los que compraron"
+- "escala con lookalike"
+- "crea una audiencia de personas similares"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        fuente:  { type: 'string', description: 'De dónde crear el lookalike: compradores, leads, visitantes. Default: compradores' },
+        ratio:   { type: 'number', description: 'Tamaño del lookalike: 0.01 = 1% (más parecido, default), 0.05 = 5% (más amplio)' },
+        pais:    { type: 'string', description: 'País. Default: US' },
+      },
+    },
+  },
+
+  {
+    name: 'crear_retargeting',
+    description: `Crea una audiencia de retargeting con los visitantes del sitio web que NO compraron.
+Son personas que ya mostraron interés — son mucho más baratas de convertir que audiencia fría.
+Úsalo cuando Eduardo diga:
+- "crea retargeting de los que no compraron"
+- "apunta a los que visitaron la landing"
+- "quiero hacer remarketing"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        dias: { type: 'number', description: 'Ventana de retargeting en días. Default: 30' },
+      },
+    },
+  },
+
+  {
+    name: 'duplicar_adset_ganador',
+    description: `Duplica el Ad Set con mejor CPL de una campaña y lo lanza con más presupuesto.
+Es la forma más rápida de escalar lo que ya funciona sin crear desde cero.
+Úsalo cuando Eduardo diga:
+- "duplica el adset que más convierte"
+- "escala el segmento ganador"
+- "dobla el mejor adset"
+- "copia el que funciona y dale más presupuesto"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        campana:     { type: 'string', description: 'Nombre parcial o ID de la campaña. Si no se da, usa la de mayor gasto.' },
+        presupuesto: { type: 'number', description: 'Presupuesto diario en USD para el adset duplicado. Default: doble del original.' },
+        periodo:     { type: 'string', description: 'Período para determinar el ganador: last_7d (default), last_14d' },
+      },
+    },
+  },
+
+  {
+    name: 'breakdown_geografico',
+    description: `Muestra qué estados o regiones de USA están convirtiendo mejor y cuáles queman dinero.
+Úsalo cuando Eduardo diga:
+- "¿qué estado convierte más?"
+- "¿dónde están los mejores leads?"
+- "breakdown por región"
+- "¿en qué estado debería concentrarme?"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial o ID de la campaña. Si no se da, usa la de mayor gasto.' },
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d', enum: ['last_7d', 'last_14d', 'last_30d'] },
+      },
+    },
+  },
+
+  {
+    name: 'tendencia_campana',
+    description: `Compara el rendimiento de una campaña esta semana vs la semana pasada: si el CPL está subiendo, bajando o estable.
+Úsalo cuando Eduardo diga:
+- "¿está mejorando la campaña?"
+- "¿el CPL subió o bajó?"
+- "¿cómo va vs la semana pasada?"
+- "tendencia de las campañas"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial o ID de la campaña. Si no se da, usa la de mayor gasto.' },
+      },
+    },
+  },
+
   // ── INTELIGENCIA META ADS ─────────────────────────
   {
     name: 'diagnostico_meta',
@@ -2855,6 +2987,301 @@ export const TOOL_HANDLERS = {
     const mensaje = lineas.join('\n');
     await notif(mensaje);
     return mensaje.replace(/<[^>]+>/g, '');
+  },
+
+  // ── BIBLIOTECA, AUDIENCIAS Y ESCALADO META ────────
+
+  async ver_biblioteca_meta({ tipo = 'ambos' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const [videos, imagenes] = await Promise.all([
+      (tipo === 'videos' || tipo === 'ambos') ? MetaConnector.getVideoLibrary(20) : Promise.resolve([]),
+      (tipo === 'imagenes' || tipo === 'ambos') ? MetaConnector.getImageLibrary(20) : Promise.resolve([]),
+    ]);
+
+    const lineas = [`🎨 <b>Biblioteca de Creativos Meta</b>`, `━━━━━━━━━━━━━━━━━━━━━━`];
+
+    if (videos.length) {
+      lineas.push(`\n🎥 <b>Videos (${videos.length})</b>`);
+      videos.forEach(v => {
+        const dur = v.duracion_s ? `${Math.round(v.duracion_s)}s` : '—';
+        lineas.push(`• ${v.titulo} — ${dur} — ${v.estado}\n  ID: ${v.id}`);
+      });
+    } else if (tipo !== 'imagenes') {
+      lineas.push(`\n🎥 Sin videos subidos aún.`);
+    }
+
+    if (imagenes.length) {
+      lineas.push(`\n🖼 <b>Imágenes (${imagenes.length})</b>`);
+      imagenes.forEach(img => {
+        lineas.push(`• ${img.nombre} — ${img.ancho}x${img.alto}px`);
+      });
+    } else if (tipo !== 'videos') {
+      lineas.push(`\n🖼 Sin imágenes subidas aún.`);
+    }
+
+    await notif(lineas.join('\n'));
+    return `Biblioteca: ${videos.length} videos, ${imagenes.length} imágenes.`;
+  },
+
+  async metricas_video({ campana = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    let campanaId, campanaNombre;
+    if (campana) {
+      const campanas = await MetaConnector.getCampanas(false);
+      const match = campanas.find(c => c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase()));
+      if (!match) return `No encontré campaña con "${campana}".`;
+      campanaId = match.id; campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas(periodo);
+      if (!todas.length) return 'No hay campañas con datos.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id; campanaNombre = top.campana_nombre;
+    }
+
+    const videos = await MetaConnector.getMetricasVideo(campanaId, periodo);
+    if (!videos.length) return `No hay métricas de video para "${campanaNombre}". ¿Es una campaña de video?`;
+
+    const ordenados = [...videos].sort((a, b) => a.tasa_completado > b.tasa_completado ? -1 : 1);
+    const lineas = [
+      `🎥 <b>Video Ads — ${esc(campanaNombre)}</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+    ];
+    ordenados.forEach((v, i) => {
+      const medalla = i === 0 ? '🏆' : `#${i + 1}`;
+      lineas.push(
+        `${medalla} <b>${esc(v.ad_nombre)}</b>\n` +
+        `   $${v.spend.toFixed(2)} | Vistas 3s: ${v.vistas_3s} | Completado: ${v.tasa_completado}%\n` +
+        `   50% retención: ${v.tasa_p50}% | ThruPlay: ${v.thruplay} | CPV: $${v.costo_por_vista || '—'}`
+      );
+    });
+
+    await notif(lineas.join('\n'));
+    return `${videos.length} video ads analizados. Tasa de completado top: ${ordenados[0]?.tasa_completado}%. Ver Telegram.`;
+  },
+
+  async ver_audiencias() {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const audiencias = await MetaConnector.getAudiencias();
+
+    if (!audiencias.length) return 'No hay audiencias personalizadas en la cuenta. Crea una con crear_audiencia_lookalike o crear_retargeting.';
+
+    const TIPO_LABEL = {
+      CUSTOM:    '📋 Custom',
+      LOOKALIKE: '🔁 Lookalike',
+      WEBSITE:   '🌐 Web/Retargeting',
+      APP:       '📱 App',
+      ENGAGEMENT:'❤️ Engagement',
+    };
+
+    const lineas = [`🎯 <b>Audiencias Personalizadas (${audiencias.length})</b>`, `━━━━━━━━━━━━━━━━━━━━━━`];
+    audiencias.forEach(a => {
+      const tipo = TIPO_LABEL[a.tipo] || a.tipo;
+      const tam  = a.tamano_min > 0 ? `~${(a.tamano_min / 1000).toFixed(0)}K–${(a.tamano_max / 1000).toFixed(0)}K personas` : 'calculando...';
+      lineas.push(`• ${tipo} <b>${esc(a.nombre)}</b>\n  ${tam} | ${a.estado}\n  ID: ${a.id}`);
+    });
+
+    await notif(lineas.join('\n'));
+    return `${audiencias.length} audiencias encontradas. Ver Telegram para detalles.`;
+  },
+
+  async crear_audiencia_lookalike({ fuente = 'compradores', ratio = 0.01, pais = 'US' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    // Buscar audiencia fuente existente que coincida con el tipo pedido
+    const audiencias = await MetaConnector.getAudiencias();
+    let fuenteId = null;
+    const keywords = fuente === 'compradores'
+      ? ['comprador', 'purchas', 'buyer', 'customer', 'venta']
+      : fuente === 'leads'
+      ? ['lead', 'contacto', 'formulario']
+      : ['visit', 'web', 'retarget', 'pixel'];
+
+    const match = audiencias.find(a =>
+      keywords.some(k => a.nombre.toLowerCase().includes(k))
+    );
+    if (match) fuenteId = match.id;
+
+    if (!fuenteId) {
+      return `No encontré una audiencia de "${fuente}" para usar como fuente. Primero necesitas tener compradores registrados en el Pixel de Meta (eventos Purchase). Verifica con ver_audiencias.`;
+    }
+
+    await notif(`🔁 Creando audiencia Lookalike ${ratio * 100}% de "${fuente}" en ${pais}...`);
+    const resultado = await MetaConnector.crearLookalike({
+      sourceAudienceId: fuenteId,
+      pais, ratio,
+      nombre: `Lookalike ${ratio * 100}% Compradores — ${pais}`,
+    });
+
+    if (!resultado.ok) return `Error creando lookalike: ${resultado.error}`;
+
+    await notif(
+      `✅ <b>Lookalike creada</b>\n` +
+      `📊 Tamaño: ${ratio * 100}% de ${pais} (similar a tus ${fuente})\n` +
+      `🆔 ID: ${resultado.id}\n\n` +
+      `💡 Ahora crea una campaña usando esta audiencia para escalar a personas similares a los que ya compraron.`
+    );
+    return `Lookalike ${ratio * 100}% creada. ID: ${resultado.id}. Úsala en tu próxima campaña para escalar.`;
+  },
+
+  async crear_retargeting({ dias = 30 } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    await notif(`🌐 Creando audiencia de retargeting — visitantes últimos ${dias} días...`);
+
+    const resultado = await MetaConnector.crearAudienciaRetargeting({
+      dias,
+      nombre: `Retargeting Visitantes ${dias}d — ${new Date().toLocaleDateString('es-US')}`,
+    });
+
+    if (!resultado.ok) return `Error creando retargeting: ${resultado.error}`;
+
+    await notif(
+      `✅ <b>Retargeting creado</b>\n` +
+      `🌐 Audiencia: visitantes de los últimos ${dias} días que NO compraron\n` +
+      `🆔 ID: ${resultado.id}\n\n` +
+      `💡 Crea una campaña con esta audiencia con un copy diferente — oferta especial, urgencia o descuento. Son personas tibias, mucho más baratas de convertir.`
+    );
+    return `Audiencia de retargeting creada (${dias} días). ID: ${resultado.id}.`;
+  },
+
+  async duplicar_adset_ganador({ campana = null, presupuesto = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    let campanaId, campanaNombre;
+    if (campana) {
+      const campanas = await MetaConnector.getCampanas(false);
+      const match = campanas.find(c => c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase()));
+      if (!match) return `No encontré campaña con "${campana}".`;
+      campanaId = match.id; campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas(periodo);
+      if (!todas.length) return 'No hay campañas con datos.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id; campanaNombre = top.campana_nombre;
+    }
+
+    const adsets = await MetaConnector.getAdSetsConMetricas(campanaId, periodo);
+    const activos = adsets.filter(a => a.estado === 'ACTIVE' && a.cpl !== null);
+    if (!activos.length) return `No hay adsets activos con conversiones en "${campanaNombre}". Necesitas leads/ventas para saber cuál es el ganador.`;
+
+    const ganador = activos.sort((a, b) => a.cpl - b.cpl)[0];
+    const nuevoPres = presupuesto || (ganador.presupuesto_dia * 2) || 20;
+
+    await notif(
+      `📈 <b>Duplicando adset ganador</b>\n` +
+      `🏆 ${esc(ganador.nombre)}\n` +
+      `CPL actual: $${ganador.cpl} | Nuevo presupuesto: $${nuevoPres}/día`
+    );
+
+    const resultado = await MetaConnector.duplicarAdSet(ganador.id, nuevoPres);
+    if (!resultado.ok) return `Error duplicando adset: ${resultado.error}`;
+
+    await LearningsDB.guardar({
+      tipo: 'campana', contexto: `Adset ganador duplicado: ${ganador.nombre}`,
+      accion: `duplicar_adset_ganador con $${nuevoPres}/día`,
+      resultado: `Nuevo adset ID: ${resultado.nuevo_id}`,
+      exito: true, tags: ['meta', 'escalar', 'adset'], relevancia: 8,
+    }).catch(() => {});
+
+    await notif(
+      `✅ <b>Adset duplicado y activo</b>\n` +
+      `📊 Nuevo adset ID: ${resultado.nuevo_id}\n` +
+      `💰 Presupuesto: $${nuevoPres}/día\n` +
+      `⚡ El algoritmo de Meta comenzará a optimizar el nuevo adset de inmediato.`
+    );
+    return `Adset ganador "${ganador.nombre}" duplicado con $${nuevoPres}/día. ID nuevo: ${resultado.nuevo_id}.`;
+  },
+
+  async breakdown_geografico({ campana = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    let campanaId, campanaNombre;
+    if (campana) {
+      const campanas = await MetaConnector.getCampanas(false);
+      const match = campanas.find(c => c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase()));
+      if (!match) return `No encontré campaña con "${campana}".`;
+      campanaId = match.id; campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas(periodo);
+      if (!todas.length) return 'No hay campañas con datos.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id; campanaNombre = top.campana_nombre;
+    }
+
+    const geo = await MetaConnector.getBreakdownGeografico(campanaId, periodo);
+    if (!geo.length) return `No hay datos geográficos para "${campanaNombre}" en ${periodo}.`;
+
+    const ordenados = [...geo]
+      .filter(r => r.spend > 0.1)
+      .sort((a, b) => {
+        if (a.cpl === null && b.cpl === null) return b.spend - a.spend;
+        if (a.cpl === null) return 1; if (b.cpl === null) return -1;
+        return a.cpl - b.cpl;
+      })
+      .slice(0, 12);
+
+    const gastoTotal = geo.reduce((s, r) => s + r.spend, 0);
+    const lineas = [
+      `🗺 <b>Breakdown Geográfico — ${esc(campanaNombre)}</b>`,
+      `Período: ${periodo} | Gasto total: $${gastoTotal.toFixed(2)}`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+    ];
+    ordenados.forEach((r, i) => {
+      const medalla = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '•';
+      const cplStr  = r.cpl !== null ? `$${r.cpl} CPL` : 'sin conv.';
+      const pct     = gastoTotal > 0 ? `${((r.spend / gastoTotal) * 100).toFixed(0)}%` : '';
+      lineas.push(`${medalla} <b>${r.region}</b>: $${r.spend.toFixed(2)} (${pct}) | ${cplStr} | ${r.conversiones} conv.`);
+    });
+
+    await notif(lineas.join('\n'));
+    return `Breakdown geográfico de "${campanaNombre}" completado. Ver Telegram para el ranking por estado.`;
+  },
+
+  async tendencia_campana({ campana = null } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    let campanaId, campanaNombre;
+    if (campana) {
+      const campanas = await MetaConnector.getCampanas(false);
+      const match = campanas.find(c => c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase()));
+      if (!match) return `No encontré campaña con "${campana}".`;
+      campanaId = match.id; campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas('last_14d');
+      if (!todas.length) return 'No hay campañas con datos.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id; campanaNombre = top.campana_nombre;
+    }
+
+    const tendencia = await MetaConnector.compararPeriodos(campanaId, 'last_7d', 'last_14d');
+    if (!tendencia) return `No hay datos suficientes para comparar períodos de "${campanaNombre}".`;
+
+    const r = tendencia.periodo_reciente;
+    const a = tendencia.periodo_anterior;
+    const flechaCpl  = tendencia.cambio_cpl_pct !== null
+      ? (tendencia.cambio_cpl_pct < 0 ? `📉 ${Math.abs(tendencia.cambio_cpl_pct)}% más barato` : `📈 ${tendencia.cambio_cpl_pct}% más caro`)
+      : '—';
+    const flechaLeads = tendencia.cambio_leads_pct !== null
+      ? (tendencia.cambio_leads_pct > 0 ? `📈 +${tendencia.cambio_leads_pct}%` : `📉 ${tendencia.cambio_leads_pct}%`)
+      : '—';
+    const estadoEmoji = { mejorando: '🟢', empeorando: '🔴', estable: '🟡', sin_datos: '⚪' };
+
+    const msg = [
+      `📊 <b>Tendencia — ${esc(campanaNombre)}</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      `Estado: ${estadoEmoji[tendencia.tendencia]} <b>${tendencia.tendencia.toUpperCase()}</b>`,
+      ``,
+      `<b>Últimos 7 días:</b>`,
+      `💰 Gasto: $${r.spend.toFixed(2)} | Leads: ${r.leads} | CPL: ${r.cpl ? `$${r.cpl}` : '—'} | CTR: ${r.ctr.toFixed(2)}%`,
+      ``,
+      `<b>7 días anteriores:</b>`,
+      `💰 Gasto: $${a.spend.toFixed(2)} | Leads: ${a.leads} | CPL: ${a.cpl ? `$${a.cpl}` : '—'} | CTR: ${a.ctr.toFixed(2)}%`,
+      ``,
+      `<b>Cambio:</b> CPL ${flechaCpl} | Leads ${flechaLeads}`,
+    ].join('\n');
+
+    await notif(msg);
+    return `Tendencia "${campanaNombre}": ${tendencia.tendencia}. CPL ${tendencia.cambio_cpl_pct !== null ? `cambió ${tendencia.cambio_cpl_pct}%` : 'sin datos suficientes'}.`;
   },
 
   // ── INTELIGENCIA META ADS ─────────────────────────
