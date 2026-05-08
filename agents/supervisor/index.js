@@ -8,7 +8,7 @@ import { MetaConnector }                                    from '../../connecto
 import { AnthropicConnector }                               from '../../connectors/anthropic.connector.js';
 import { TelegramConnector, esc }                           from '../../connectors/telegram.connector.js';
 import { CampaignManager }                                  from '../../ads_engine/campaign-manager.js';
-import { generarSlideshowParaCampana }                      from '../../ads_engine/campaign-creator.js';
+import { generarSlideshowParaCampana, escalarCreativoCompleto } from '../../ads_engine/campaign-creator.js';
 import { SupervisorMemory }                                 from './memory.js';
 import { LearningsDB }                                      from '../../memory/learnings.db.js';
 import { SystemState }                                      from '../../config/system-state.js';
@@ -60,8 +60,14 @@ ACCIONES DISPONIBLES:
 - "escalar": subir presupuesto al siguiente paso de la escalera
 - "reducir": bajar presupuesto
 - "refresh_creativo": frecuencia > ${BUSINESS.riesgo.frecuenciaFatiga} — solicitar nuevo slideshow
+- "escalar_creativo": CPL < objetivo Y dias_activa >= 3 → upgrade a slideshow profesional 5 imágenes
 - "mantener": observar sin cambios
 - "alerta": notificar a Eduardo sin ejecutar
+
+REGLA CRÍTICA DE CREATIVOS:
+- "refresh_creativo": SOLO cuando frecuencia > ${BUSINESS.riesgo.frecuenciaFatiga} Y (roas >= 1.0 O roas es null con CPL < objetivo × 1.5)
+  Si frecuencia alta pero ROAS < 1.0 → usa "pausar" (el problema es el producto/precio, no el creativo)
+- "escalar_creativo": cuando CPL < objetivo Y dias_activa >= 3 Y no se ha hecho upgrade antes → genera slideshow premium
 
 REGLAS DE RIESGO AUTOMÁTICAS (aplicar antes que cualquier otra decisión):
 - CPL > $${BUSINESS.riesgo.cplMaxAntesPausar} → pausar inmediatamente (autonomo: true)
@@ -317,6 +323,34 @@ Devuelve ÚNICAMENTE un JSON array con una decisión por campaña. Para "refresh
               );
             } catch (slErr) {
               await TelegramConnector.notificar(`⚠️ Refresh fallido para ${esc(d.campana_nombre)}: ${esc(slErr.message)}`);
+            }
+          } else if (d.decision === 'escalar_creativo') {
+            const producto = d.campana_nombre?.split(' — ')[1] || d.campana_nombre;
+            const nicho    = d.nicho || 'marketing digital';
+            await TelegramConnector.notificar(
+              `🎬 <b>Supervisor: Upgrade de creativo</b>\n` +
+              `📊 ${esc(d.campana_nombre)}\n` +
+              `✅ CPL validado — generando slideshow profesional...`
+            );
+            try {
+              const sl = await escalarCreativoCompleto(producto, nicho, d.segmento || 'emprendedor-principiante', 5);
+              await LearningsDB.guardar({
+                tipo:      'campana',
+                contexto:  `Upgrade creativo validado: ${d.campana_nombre}`,
+                accion:    `Slideshow profesional 5 imágenes tras CPL validado`,
+                resultado: `Video ID: ${sl.videoId} — listo para asignar al adset`,
+                exito:     true,
+                tags:      ['upgrade_creativo', 'slideshow_pro', 'validado'],
+                relevancia: 7,
+              }).catch(() => {});
+              await TelegramConnector.notificar(
+                `✅ <b>Slideshow profesional listo</b>\n` +
+                `🎬 5 imágenes generadas\n` +
+                `🆔 Video ID: ${sl.videoId}\n` +
+                `💡 Asigna a ${esc(d.campana_nombre)} para escalar con mejor creativo.`
+              );
+            } catch (upErr) {
+              await TelegramConnector.notificar(`⚠️ Upgrade creativo falló: ${esc(upErr.message)}`);
             }
           }
 

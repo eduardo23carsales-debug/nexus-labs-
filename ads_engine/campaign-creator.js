@@ -12,6 +12,7 @@ import { OpenAIConnector }    from '../connectors/openai.connector.js';
 import { AnthropicConnector } from '../connectors/anthropic.connector.js';
 import { SEGMENTOS }          from './segments.config.js';
 import ENV from '../config/env.js';
+import { BUSINESS } from '../config/business.config.js';
 
 // Targeting base para productos digitales: EEUU hispanohablante
 const TARGETING_DIGITAL = {
@@ -152,6 +153,45 @@ Respond with ONLY the prompt, no labels:`,
   return { videoId, nSlides: urls.length, imageUrls: urls };
 }
 
+// ── Generar 2 creativos de test (texto bold sobre fondo oscuro) — barato, testea copy ──
+export async function generarCreativosTest(copies, nombreProducto, nicho, precio = 27) {
+  console.log('[CampaignCreator] Generando creativos de test (texto bold)...');
+  const mejoresCopies = copies.slice(0, 2);
+  const urls = [];
+
+  for (const copy of mejoresCopies) {
+    try {
+      const prompt = `Professional digital marketing ad image for Hispanic US audience.
+Dark gradient background (deep navy to black, no textures).
+Large bold white sans-serif text centered: "${copy.headline || copy.titulo || nombreProducto}".
+Below it, smaller white text: "${(copy.body || copy.descripcion || '').substring(0, 60)}".
+Bottom right: bright green pill badge with text "$${precio}".
+Style: clean, minimal, high contrast, no photos, no people, text-focused.
+Aspect ratio 1:1. Professional and trustworthy.`;
+      const url = await generarYSubirImagen(prompt);
+      if (url) urls.push(url);
+    } catch (err) {
+      console.warn('[CampaignCreator] Error generando creativo test:', err.message);
+    }
+  }
+
+  if (!urls.length) throw new Error('No se pudieron generar creativos de test');
+
+  const slideshow = await MetaConnector.crearSlideshowDesdeUrls(urls, {
+    duracionMs:  3000,
+    transicion:  'FADE',
+  });
+
+  console.log(`[CampaignCreator] Test creativo listo — ${urls.length} slides, videoId: ${slideshow.video_id}`);
+  return { videoId: slideshow.video_id, nSlides: urls.length, modo: 'test' };
+}
+
+// ── Upgrade creativo completo (slideshow 5 imágenes) para campaña validada ──
+export async function escalarCreativoCompleto(nombreProducto, nicho, segmento, nImagenes = 5) {
+  console.log(`[CampaignCreator] Upgrade creativo completo — ${nombreProducto}`);
+  return generarSlideshowParaCampana(nombreProducto, nicho, segmento, nImagenes);
+}
+
 // ── Generar imagen, validar con Claude Vision (base64), reintentar si calidad baja ──
 async function generarImagenValidada(promptBase, contexto, maxIntentos = 3) {
   let prompt   = promptBase;
@@ -229,7 +269,7 @@ async function crearFormulario(segmento, stripeUrl = null) {
 
 // ── CREAR CAMPAÑA COMPLETA ────────────────────────────
 // imagenHash opcional: si se pasa, usa esa imagen en vez de buscar/generar una
-export async function crearCampana(segmento, presupuestoDia, { imagenHash, copies, stripeUrl, nombreProducto, nicho, slideshow = true } = {}) {
+export async function crearCampana(segmento, presupuestoDia, { imagenHash, copies, stripeUrl, nombreProducto, nicho, slideshow = true, modoTest = true } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
 
@@ -273,11 +313,14 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
     assetTipo   = 'imagen';
     assetIdFijo = imagenHash;
   } else if (slideshow && nombreProducto) {
-    console.log('[AdsEngine] Generando slideshow video...');
-    const sl    = await generarSlideshowParaCampana(nombreProducto, nicho || seg.nombre, seg);
+    console.log('[AdsEngine] Generando creativo...');
+    const copiasParaTest = (Array.isArray(copies) && copies.length) ? copies : seg.copies;
+    const sl = modoTest
+      ? await generarCreativosTest(copiasParaTest, nombreProducto, nicho || seg.nombre, BUSINESS?.breakeven?.precioProducto || 27)
+      : await generarSlideshowParaCampana(nombreProducto, nicho || seg.nombre, seg, 5);
     assetTipo   = 'video';
     assetIdFijo = sl.videoId;
-    console.log(`[AdsEngine] Slideshow listo (${sl.nSlides} slides → video ${sl.videoId})`);
+    console.log(`[AdsEngine] Creativo listo (${sl.nSlides} slides → video ${sl.videoId}, modo: ${sl.modo || 'completo'})`);
   } else if (videoPath) {
     assetTipo   = 'video';
     assetIdFijo = await subirVideoLocal(videoPath);
@@ -364,7 +407,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
 }
 
 // ── CAMPAÑA DE TRÁFICO A URL (para Hotmart / landing page) ──
-export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies, nombreProducto, nicho, slideshow = true } = {}) {
+export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies, nombreProducto, nicho, slideshow = true, modoTest = true } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
   if (!urlDestino) throw new Error('urlDestino es requerido para campañas de tráfico');
@@ -390,11 +433,14 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
   const fotoPath  = buscarFoto(segmento);
 
   if (slideshow && nombreProducto) {
-    console.log('[AdsEngine] Generando slideshow video...');
-    const sl    = await generarSlideshowParaCampana(nombreProducto, nicho || seg.nombre, seg);
+    console.log('[AdsEngine] Generando creativo...');
+    const copiasParaTest = (Array.isArray(copies) && copies.length) ? copies : seg.copies;
+    const sl = modoTest
+      ? await generarCreativosTest(copiasParaTest, nombreProducto, nicho || seg.nombre, BUSINESS?.breakeven?.precioProducto || 27)
+      : await generarSlideshowParaCampana(nombreProducto, nicho || seg.nombre, seg, 5);
     assetTipo   = 'video';
     assetIdFijo = sl.videoId;
-    console.log(`[AdsEngine] Slideshow listo (${sl.nSlides} slides → video ${sl.videoId})`);
+    console.log(`[AdsEngine] Creativo listo (${sl.nSlides} slides → video ${sl.videoId}, modo: ${sl.modo || 'completo'})`);
   } else if (videoPath) {
     assetTipo   = 'video';
     assetIdFijo = await subirVideoLocal(videoPath);
