@@ -758,6 +758,54 @@ const FUNCIONES_VAPI = [
       },
     },
   },
+
+  // ── INTELIGENCIA META ADS (voz) ───────────────────
+  {
+    name:        'diagnostico_meta',
+    description: 'Diagnóstico completo con IA de todas las campañas Meta Ads: qué está fallando, dónde se va el dinero, qué pausar y qué escalar. Úsalo cuando Eduardo dice "¿por qué no tengo ventas?", "¿qué está fallando?", "analiza mis campañas", "dame un diagnóstico de Meta", "¿dónde se va el dinero?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d', enum: ['last_7d', 'last_14d', 'last_30d', 'yesterday', 'this_month'] },
+      },
+    },
+  },
+
+  {
+    name:        'metricas_adsets',
+    description: 'Ranking de Ad Sets por CPL: qué segmento de audiencia convierte mejor y cuál está quemando dinero. Úsalo cuando Eduardo dice "¿qué audiencia está funcionando?", "¿qué adset pauso?", "muéstrame los segmentos".',
+    parameters: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial de la campaña. Opcional — si no se da, usa la de mayor gasto.' },
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d' },
+      },
+    },
+  },
+
+  {
+    name:        'metricas_anuncios',
+    description: 'Ranking de creativos por CPL: qué copy e imagen convierte mejor y cuál es el peor. Úsalo cuando Eduardo dice "¿qué copy está funcionando?", "¿qué anuncio convierte más?", "¿cuál creativo ganó?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial de la campaña. Opcional.' },
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d' },
+      },
+    },
+  },
+
+  {
+    name:        'breakdown_campana',
+    description: 'Desglose de una campaña por edad, género, placement (Facebook vs Instagram vs Reels) y frecuencia. Úsalo cuando Eduardo dice "¿qué edad está comprando?", "¿funciona mejor en Instagram?", "¿hay fatiga?", "¿en qué placement convierte?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial de la campaña. Opcional.' },
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d' },
+      },
+    },
+  },
 ];
 
 // ── Config completa de VAPI ───────────────────────────
@@ -782,6 +830,7 @@ CAPACIDADES QUE TIENES:
 - Llamadas: iniciar llamadas a clientes con Sofía con cualquier objetivo
 - CRM: ver, guardar, buscar clientes, historial, seguimientos, registrar ventas
 - Campañas Meta: crear, pausar, escalar, ver reporte del día
+- Diagnóstico Meta: analizar por qué no hay ventas, ranking de adsets y creativos, breakdown por edad/placement/frecuencia
 - Agentes: ejecutar analista, supervisor, aprobar plan
 - Portafolio: crear proyectos, ver métricas, actualizar estado y revenue
 - Landings: crear páginas web para negocios

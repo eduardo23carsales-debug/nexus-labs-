@@ -929,6 +929,86 @@ Incluye desglose por producto y ROI de cada campaña.
       },
     },
   },
+
+  // ── INTELIGENCIA META ADS ─────────────────────────
+  {
+    name: 'diagnostico_meta',
+    description: `Diagnóstico completo con IA de todas tus campañas de Meta Ads.
+Analiza: gasto por campaña, CPL, adsets que queman dinero sin convertir, creativos que fallan, fatiga de audiencia, placement ineficiente, y comparativa con períodos anteriores.
+Al final entrega recomendaciones concretas con números: qué pausar, qué escalar, qué cambiar.
+Úsalo cuando Eduardo diga:
+- "¿por qué no tengo ventas?"
+- "¿qué está fallando en las campañas?"
+- "analiza mis ads"
+- "¿qué tengo que cambiar?"
+- "dame un diagnóstico de Meta"
+- "¿dónde se está yendo el dinero?"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        periodo: {
+          type: 'string',
+          description: 'Período a analizar. Opciones: last_7d (default), last_14d, last_30d, yesterday, this_month',
+          enum: ['last_7d', 'last_14d', 'last_30d', 'yesterday', 'this_month'],
+        },
+      },
+    },
+  },
+
+  {
+    name: 'metricas_adsets',
+    description: `Muestra métricas de los Ad Sets (segmentos de audiencia) de una campaña específica.
+Revela qué audiencia convierte mejor, cuál quema dinero, y cuál tiene CPL más bajo.
+Úsalo cuando Eduardo diga:
+- "¿qué audiencia está funcionando?"
+- "¿qué adset está convirtiendo?"
+- "muéstrame los segmentos de la campaña X"
+- "¿qué audiencia pauso?"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        campana:  { type: 'string', description: 'Nombre parcial o ID de la campaña. Si no se da, analiza la campaña con más gasto.' },
+        periodo:  { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d', enum: ['last_7d', 'last_14d', 'last_30d'] },
+      },
+    },
+  },
+
+  {
+    name: 'metricas_anuncios',
+    description: `Muestra qué anuncio (copy + imagen) está convirtiendo mejor dentro de una campaña.
+Ordena los creativos de mejor a peor CPL para saber cuál duplicar y cuál apagar.
+Úsalo cuando Eduardo diga:
+- "¿qué copy está funcionando?"
+- "¿qué anuncio convierte más?"
+- "¿cuál creativo está ganando?"
+- "muéstrame el rendimiento de los ads de la campaña X"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial o ID de la campaña. Si no se da, usa la de mayor gasto.' },
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d', enum: ['last_7d', 'last_14d', 'last_30d'] },
+      },
+    },
+  },
+
+  {
+    name: 'breakdown_campana',
+    description: `Desglose profundo de una campaña: demografía (edad+género), placement (Facebook vs Instagram vs Reels), y frecuencia (fatiga).
+Úsalo cuando Eduardo diga:
+- "¿qué edad está comprando?"
+- "¿funciona mejor en Instagram o Facebook?"
+- "¿en qué placement está convirtiendo?"
+- "¿el anuncio está saturado?"
+- "¿hay fatiga en mis ads?"
+- "¿los reels están funcionando?"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial o ID de la campaña. Si no se da, usa la de mayor gasto.' },
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d', enum: ['last_7d', 'last_14d', 'last_30d'] },
+      },
+    },
+  },
 ];
 
 // ── Inferir contexto de nicho desde el nombre del producto ─
@@ -2775,6 +2855,260 @@ export const TOOL_HANDLERS = {
     const mensaje = lineas.join('\n');
     await notif(mensaje);
     return mensaje.replace(/<[^>]+>/g, '');
+  },
+
+  // ── INTELIGENCIA META ADS ─────────────────────────
+
+  async diagnostico_meta({ periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    await notif(`🔍 <b>Diagnóstico Meta Ads iniciado</b>\nRecopilando datos de ${periodo}...`);
+
+    // 1. Datos en paralelo: cuenta + todas las campañas + campañas activas
+    const [cuenta, campanas, metricasCampanas] = await Promise.all([
+      MetaConnector.getInsightsCuenta(periodo),
+      MetaConnector.getCampanas(false),
+      MetaConnector.getMetricasTodasCampanas(periodo),
+    ]);
+
+    if (!metricasCampanas.length) {
+      return 'No hay datos de campañas para el período seleccionado. Verifica que tengas campañas activas o con gasto reciente.';
+    }
+
+    // 2. Para las 3 campañas con más gasto, obtener detalle (adsets + demografía + placement + frecuencia)
+    const topCampanas = [...metricasCampanas]
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 3);
+
+    const detalles = await Promise.all(topCampanas.map(async c => {
+      const [adsets, anuncios, demografia, placement, frecuencia] = await Promise.all([
+        MetaConnector.getAdSetsConMetricas(c.campana_id, periodo),
+        MetaConnector.getAnunciosConMetricas(c.campana_id, periodo),
+        MetaConnector.getBreakdownDemografico(c.campana_id, periodo),
+        MetaConnector.getBreakdownPlacement(c.campana_id, periodo),
+        MetaConnector.getFrecuenciaYAlcance(c.campana_id, periodo),
+      ]);
+      return { ...c, adsets, anuncios, demografia, placement, frecuencia };
+    }));
+
+    // 3. Enviar todo a Claude para diagnóstico profesional
+    const contexto = JSON.stringify({ cuenta, detalles }, null, 2);
+    const diagnostico = await AnthropicConnector.completar({
+      system: `Eres el estratega de paid media más efectivo del mundo hispano. Analizas datos de Meta Ads y das diagnósticos brutalmente honestos con recomendaciones concretas y accionables. Tu objetivo: que el negocio genere ventas reales, no solo leads.`,
+      prompt: `Analiza estos datos de Meta Ads del período ${periodo} y diagnostica POR QUÉ no hay ventas.
+
+DATOS COMPLETOS:
+${contexto}
+
+Entrega un diagnóstico profesional con:
+
+1. RESUMEN EJECUTIVO (2-3 líneas: qué está pasando en general)
+2. PROBLEMAS CRÍTICOS (lo que más está quemando dinero sin convertir)
+3. QUÉ ESTÁ FUNCIONANDO (si hay algo positivo, menciona para mantenerlo)
+4. PLAN DE ACCIÓN INMEDIATO (mínimo 3 acciones concretas con números: qué pausar, qué escalar, qué cambiar, qué testear)
+5. SEÑALES DE ALARMA (fatiga, CPL alto, placement ineficiente, demografía incorrecta)
+
+Sé específico con números. No digas "el CPL es alto" — di "el CPL de $47 en la campaña X está 3x por encima del objetivo de $15".
+Responde en español, en tono directo como un socio estratégico, no como consultor corporativo.`,
+      maxTokens: 1200,
+    });
+
+    // 4. Guardar como aprendizaje
+    await LearningsDB.guardar({
+      tipo:      'diagnostico_campana',
+      contexto:  `Diagnóstico Meta Ads ${periodo} — Gasto total: $${cuenta?.spend || 0}`,
+      accion:    'diagnostico_meta ejecutado desde Jarvis',
+      resultado: diagnostico.slice(0, 300),
+      exito:     true,
+      tags:      ['meta', 'diagnostico', periodo],
+      relevancia: 7,
+    }).catch(() => {});
+
+    // 5. Publicar en Telegram + devolver
+    const msg =
+      `🧠 <b>Diagnóstico Meta Ads — ${periodo}</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `💰 Gasto total: $${(cuenta?.spend || 0).toFixed(2)} | Leads: ${cuenta?.leads || 0} | Compras: ${cuenta?.compras || 0}\n` +
+      `CPL cuenta: ${cuenta?.cpl ? `$${cuenta.cpl}` : '—'} | CTR: ${cuenta?.ctr ? `${cuenta.ctr.toFixed(2)}%` : '—'}\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      esc(diagnostico);
+
+    await notif(msg);
+    return `Diagnóstico completado. Campañas analizadas: ${metricasCampanas.length}. Ver Telegram para el análisis completo.`;
+  },
+
+  async metricas_adsets({ campana = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    // Resolver campaña: por nombre/ID o la de mayor gasto
+    let campanaId, campanaNombre;
+    if (campana) {
+      const campanas = await MetaConnector.getCampanas(false);
+      const match = campanas.find(c =>
+        c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase())
+      );
+      if (!match) return `No encontré campaña con "${campana}". Usa ver_reporte para ver los nombres exactos.`;
+      campanaId = match.id;
+      campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas(periodo);
+      if (!todas.length) return 'No hay campañas con datos en ese período.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id;
+      campanaNombre = top.campana_nombre;
+    }
+
+    const adsets = await MetaConnector.getAdSetsConMetricas(campanaId, periodo);
+    if (!adsets.length) return `No hay ad sets con datos para "${campanaNombre}" en ${periodo}.`;
+
+    const ordenados = [...adsets].sort((a, b) => {
+      if (a.cpl === null && b.cpl === null) return b.spend - a.spend;
+      if (a.cpl === null) return 1;
+      if (b.cpl === null) return -1;
+      return a.cpl - b.cpl;
+    });
+
+    const lineas = ordenados.map((a, i) => {
+      const medalla = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '•';
+      const estado  = a.estado === 'ACTIVE' ? '▶️' : '⏸';
+      const cplStr  = a.cpl !== null ? `CPL $${a.cpl}` : 'sin leads';
+      const gastoPct = adsets.reduce((s, x) => s + x.spend, 0) > 0
+        ? `${((a.spend / adsets.reduce((s, x) => s + x.spend, 0)) * 100).toFixed(0)}% del gasto`
+        : '';
+      return `${medalla} ${estado} <b>${esc(a.nombre)}</b>\n   $${a.spend.toFixed(2)} | ${cplStr} | ${a.leads} leads | CTR ${a.ctr.toFixed(2)}%${gastoPct ? ` | ${gastoPct}` : ''}`;
+    });
+
+    const gastoTotal = adsets.reduce((s, a) => s + a.spend, 0);
+    const leadsTotal = adsets.reduce((s, a) => s + a.leads, 0);
+    const msg =
+      `🎯 <b>Ad Sets — ${esc(campanaNombre)}</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Período: ${periodo} | Gasto total: $${gastoTotal.toFixed(2)} | Leads: ${leadsTotal}\n\n` +
+      lineas.join('\n\n');
+
+    await notif(msg);
+    return `${adsets.length} ad sets analizados para "${campanaNombre}". Ver Telegram para el ranking completo.`;
+  },
+
+  async metricas_anuncios({ campana = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    let campanaId, campanaNombre;
+    if (campana) {
+      const campanas = await MetaConnector.getCampanas(false);
+      const match = campanas.find(c =>
+        c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase())
+      );
+      if (!match) return `No encontré campaña con "${campana}".`;
+      campanaId = match.id;
+      campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas(periodo);
+      if (!todas.length) return 'No hay campañas con datos en ese período.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id;
+      campanaNombre = top.campana_nombre;
+    }
+
+    const anuncios = await MetaConnector.getAnunciosConMetricas(campanaId, periodo);
+    if (!anuncios.length) return `No hay anuncios con datos para "${campanaNombre}" en ${periodo}.`;
+
+    const ordenados = [...anuncios].sort((a, b) => {
+      if (a.cpl === null && b.cpl === null) return b.spend - a.spend;
+      if (a.cpl === null) return 1;
+      if (b.cpl === null) return -1;
+      return a.cpl - b.cpl;
+    });
+
+    const lineas = ordenados.map((a, i) => {
+      const medalla = i === 0 ? '🏆 GANADOR' : i === ordenados.length - 1 && ordenados.length > 1 ? '🔴 PEOR' : `#${i + 1}`;
+      const cplStr  = a.cpl !== null ? `$${a.cpl} CPL` : 'sin conv.';
+      return `${medalla} — <b>${esc(a.ad_nombre)}</b>\n   $${a.spend.toFixed(2)} gastado | ${cplStr} | ${a.leads} leads | ${a.clicks} clicks | CTR ${a.ctr.toFixed(2)}%`;
+    });
+
+    const gastoTotal = anuncios.reduce((s, a) => s + a.spend, 0);
+    const msg =
+      `🎨 <b>Rendimiento de Creativos — ${esc(campanaNombre)}</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Período: ${periodo} | Total: $${gastoTotal.toFixed(2)} en ${anuncios.length} ads\n\n` +
+      lineas.join('\n\n') +
+      (ordenados.length >= 2 ? `\n\n💡 Escala el ganador, pausa el peor.` : '');
+
+    await notif(msg);
+    return `${anuncios.length} anuncios analizados. El ganador por CPL es "${ordenados[0]?.ad_nombre}". Ver Telegram para el ranking.`;
+  },
+
+  async breakdown_campana({ campana = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    let campanaId, campanaNombre;
+    if (campana) {
+      const campanas = await MetaConnector.getCampanas(false);
+      const match = campanas.find(c =>
+        c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase())
+      );
+      if (!match) return `No encontré campaña con "${campana}".`;
+      campanaId = match.id;
+      campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas(periodo);
+      if (!todas.length) return 'No hay campañas con datos en ese período.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id;
+      campanaNombre = top.campana_nombre;
+    }
+
+    const [demografia, placement, frecuencia] = await Promise.all([
+      MetaConnector.getBreakdownDemografico(campanaId, periodo),
+      MetaConnector.getBreakdownPlacement(campanaId, periodo),
+      MetaConnector.getFrecuenciaYAlcance(campanaId, periodo),
+    ]);
+
+    const lineas = [`🔬 <b>Desglose Profundo — ${esc(campanaNombre)}</b>`, `Período: ${periodo}`, `━━━━━━━━━━━━━━━━━━━━━━`];
+
+    // Demografía
+    if (demografia.length) {
+      lineas.push(`\n👥 <b>Demografía (edad + género)</b>`);
+      const demOrdenada = [...demografia].sort((a, b) => {
+        if (a.cpl === null && b.cpl === null) return b.spend - a.spend;
+        if (a.cpl === null) return 1; if (b.cpl === null) return -1;
+        return a.cpl - b.cpl;
+      }).slice(0, 8);
+      demOrdenada.forEach(d => {
+        const genero = d.genero === 'male' ? 'Hombres' : d.genero === 'female' ? 'Mujeres' : d.genero;
+        const cplStr = d.cpl !== null ? `CPL $${d.cpl}` : 'sin conv.';
+        lineas.push(`• ${genero} ${d.edad}: $${d.spend.toFixed(2)} | ${cplStr} | ${d.leads} leads | CTR ${d.ctr.toFixed(2)}%`);
+      });
+    }
+
+    // Placement
+    if (placement.length) {
+      lineas.push(`\n📱 <b>Placement (plataforma + posición)</b>`);
+      const plOrdenado = [...placement].sort((a, b) => {
+        if (a.cpl === null && b.cpl === null) return b.spend - a.spend;
+        if (a.cpl === null) return 1; if (b.cpl === null) return -1;
+        return a.cpl - b.cpl;
+      }).slice(0, 8);
+      plOrdenado.forEach(p => {
+        const plataforma = `${p.plataforma}/${p.posicion}`.replace(/_/g, ' ');
+        const cplStr = p.cpl !== null ? `CPL $${p.cpl}` : 'sin conv.';
+        lineas.push(`• ${plataforma}: $${p.spend.toFixed(2)} | ${cplStr} | ${p.leads} leads | CTR ${p.ctr.toFixed(2)}%`);
+      });
+    }
+
+    // Frecuencia / fatiga
+    if (frecuencia) {
+      lineas.push(`\n🔄 <b>Frecuencia y Alcance</b>`);
+      lineas.push(`Frecuencia: ${frecuencia.frequency.toFixed(2)}x | Alcance único: ${frecuencia.reach.toLocaleString()} personas`);
+      const nivelEmoji = { fresco: '🟢', normal: '🟡', fatiga_moderada: '🟠', fatiga_critica: '🔴' };
+      lineas.push(`Estado: ${nivelEmoji[frecuencia.nivel_fatiga] || '⚪'} ${frecuencia.nivel_fatiga.replace(/_/g, ' ').toUpperCase()}`);
+      if (frecuencia.alerta_fatiga) {
+        lineas.push(`⚠️ El anuncio está siendo visto demasiadas veces por las mismas personas. Considera rotar creativos.`);
+      }
+    }
+
+    const msg = lineas.join('\n');
+    await notif(msg);
+    return `Desglose de "${campanaNombre}" completado — demografía, placement y frecuencia. Ver Telegram para los detalles.`;
   },
 };
 
