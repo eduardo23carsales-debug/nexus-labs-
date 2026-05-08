@@ -491,7 +491,12 @@ async function manejarCallback(cbq) {
 
   if (data.startsWith('rellamar:')) {
     const [, tel, nombre] = data.split(':');
-    await llamarLead({ nombre: nombre || 'Lead', telefono: tel, segmento: 'mal-credito' });
+    const telLimpio = tel.replace(/\D/g, '');
+    await TelegramConnector.notificar(
+      `📱 <b>Seguimiento — ${esc(nombre || 'Lead')}</b>\n` +
+      `Contáctalos tú directamente:\n` +
+      `<a href="https://wa.me/${telLimpio}">WhatsApp: ${esc(tel)}</a>`
+    );
   }
 
   if (data === 'proyectos') {
