@@ -229,7 +229,7 @@ async function crearFormulario(segmento, stripeUrl = null) {
 
 // ── CREAR CAMPAÑA COMPLETA ────────────────────────────
 // imagenHash opcional: si se pasa, usa esa imagen en vez de buscar/generar una
-export async function crearCampana(segmento, presupuestoDia, { imagenHash, copies, stripeUrl, nombreProducto, nicho, slideshow = false } = {}) {
+export async function crearCampana(segmento, presupuestoDia, { imagenHash, copies, stripeUrl, nombreProducto, nicho, slideshow = true } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
 
@@ -364,7 +364,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
 }
 
 // ── CAMPAÑA DE TRÁFICO A URL (para Hotmart / landing page) ──
-export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies, nombreProducto, nicho, slideshow = false } = {}) {
+export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies, nombreProducto, nicho, slideshow = true } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
   if (!urlDestino) throw new Error('urlDestino es requerido para campañas de tráfico');
