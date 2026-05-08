@@ -516,6 +516,113 @@ export const ResendConnector = {
     }
     return procesadas;
   },
+
+  // ── Recuperación de leads Meta que nunca compraron ──
+  async procesarLeadsNoConvertidos() {
+    if (!this.disponible()) return 0;
+    const { LeadsDB } = await import('../memory/leads.db.js');
+
+    const leads = await LeadsDB.conEmailSinCompra().catch(() => []);
+    if (!leads.length) return 0;
+
+    // Obtener producto activo para el link de pago
+    const { rows: exps } = await query(
+      `SELECT nombre, precio, stripe_payment_link FROM experiments
+       WHERE estado = 'activo' AND stripe_payment_link IS NOT NULL
+       ORDER BY creado_en DESC LIMIT 1`
+    );
+    const exp = exps[0];
+    if (!exp) return 0;
+
+    const SECUENCIAS = [
+      { fuente: 'lead_rec_d1', minH: 23,  maxH: 72  },
+      { fuente: 'lead_rec_d3', minH: 72,  maxH: 168 },
+      { fuente: 'lead_rec_d7', minH: 168, maxH: 720 },
+    ];
+
+    let enviados = 0;
+    for (const lead of leads) {
+      const edadH = (Date.now() - new Date(lead.creado_en)) / 3600000;
+      const paso  = SECUENCIAS.find(s => edadH >= s.minH && edadH < s.maxH);
+      if (!paso) continue;
+
+      const { rows: ya } = await query(
+        `SELECT id FROM email_sequences WHERE email = $1 AND fuente = $2`,
+        [lead.email, paso.fuente]
+      );
+      if (ya.length) continue;
+
+      try {
+        await this._enviarRecuperacionLead({
+          para: lead.email, nombre: lead.nombre?.split(' ')[0] || '',
+          producto: exp.nombre, precio: exp.precio,
+          linkPago: exp.stripe_payment_link, paso: paso.fuente,
+        });
+        await query(
+          `INSERT INTO email_sequences (email, fuente) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+          [lead.email, paso.fuente]
+        );
+        enviados++;
+      } catch (err) {
+        console.warn(`[Resend] Lead recovery error ${lead.email}:`, err.message);
+      }
+    }
+    if (enviados > 0) console.log(`[Resend] ${enviados} emails de recuperación de leads enviados`);
+    return enviados;
+  },
+
+  async _enviarRecuperacionLead({ para, nombre, producto, precio, linkPago, paso }) {
+    const resend = await getResend();
+    const saludo = nombre ? `Hola <strong style="color:#00ff88;">${nombre}</strong>` : 'Hola';
+
+    const configs = {
+      lead_rec_d1: {
+        subject: `¿Listo para generar tus primeros ingresos con "${producto}"?`,
+        headline: '¿Tuviste la oportunidad de revisarlo?',
+        cuerpo:   `Hace poco mostraste interés en <strong style="color:#fff;">${producto}</strong>. Si todavía no has tenido la oportunidad de revisarlo, aquí está tu acceso.`,
+        cta: 'Ver mi oportunidad ahora', color: '#00ff88', colorTexto: '#000',
+      },
+      lead_rec_d3: {
+        subject: `"${producto}" — Personas como tú ya están generando resultados`,
+        headline: 'Lo que otros están logrando',
+        cuerpo:   `Miles de hispanos en USA están usando <strong style="color:#fff;">${producto}</strong> para generar ingresos extra desde casa. Tu acceso sigue disponible.`,
+        cta: 'Empezar ahora por $' + precio, color: '#f0a500', colorTexto: '#000',
+      },
+      lead_rec_d7: {
+        subject: `⏰ Tu acceso a "${producto}" — última oportunidad`,
+        headline: '⚠️ Este es el último recordatorio',
+        cuerpo:   `Reservamos tu acceso a <strong style="color:#fff;">${producto}</strong> durante 7 días. Si no lo aprovechas hoy, no podremos garantizar el precio actual de <strong>$${precio}</strong>.`,
+        cta: '¡Quiero mi acceso ahora!', color: '#ff4444', colorTexto: '#fff',
+      },
+    };
+    const cfg = configs[paso] || configs.lead_rec_d1;
+
+    const { error } = await resend.emails.send({
+      from: `${FROM_NAME()} <${FROM()}>`,
+      to:   para,
+      subject: cfg.subject,
+      html: `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#0f0f0f;">
+<div style="max-width:600px;margin:40px auto;background:#1a1a1a;border-radius:12px;overflow:hidden;border:1px solid #222;">
+  <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:36px 32px;text-align:center;border-bottom:3px solid ${cfg.color};">
+    <h1 style="color:#fff;margin:0;font-size:1.4em;">${cfg.headline}</h1>
+  </div>
+  <div style="padding:40px 32px;">
+    <p style="font-size:1.05em;color:#e0e0e0;margin:0 0 20px;">${saludo},</p>
+    <p style="color:#aaa;line-height:1.8;margin:0 0 28px;">${cfg.cuerpo}</p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 32px;">
+      <tr><td align="center" style="border-radius:8px;background:${cfg.color};">
+        <a href="${linkPago}" target="_blank" style="background:${cfg.color};color:${cfg.colorTexto};padding:18px 40px;font-size:1.05em;font-weight:bold;text-decoration:none;border-radius:8px;display:inline-block;">${cfg.cta}</a>
+      </td></tr>
+    </table>
+  </div>
+  <div style="background:#111;padding:16px 32px;text-align:center;border-top:1px solid #222;">
+    <p style="color:#444;font-size:0.8em;margin:0;">${FROM_NAME()} · Para darte de baja responde "baja" a este email</p>
+  </div>
+</div></body></html>`,
+    });
+    if (error) throw new Error(error.message);
+  },
 };
 
 // ── HTML de entrega de producto ────────────────────

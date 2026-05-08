@@ -6,9 +6,29 @@
 import { AnthropicConnector } from '../connectors/anthropic.connector.js';
 import { TelegramConnector }  from '../connectors/telegram.connector.js';
 import { ExperimentsDB, ProductsMemoryDB } from '../memory/products.db.js';
+import { SystemState }        from '../config/system-state.js';
+import { CampaignManager }    from '../ads_engine/campaign-manager.js';
+import { StripeConnector }    from '../connectors/stripe.connector.js';
+import { LearningsDB }        from '../memory/learnings.db.js';
+import { query }              from '../config/database.js';
 
 const SYSTEM = `Eres el agente de scaling de Nexus Labs. Analizas experimentos de productos
 digitales y decides qué hacer con ellos en base a datos reales. Responde con JSON válido.`;
+
+// ── Busca campaign_ids vinculadas a un experimento ──
+async function encontrarCampanasDeExperimento(expId) {
+  try {
+    const { rows } = await query(
+      `SELECT campaign_ids FROM projects WHERE experiment_id = $1 LIMIT 1`,
+      [expId]
+    );
+    if (!rows[0]?.campaign_ids) return [];
+    const ids = Array.isArray(rows[0].campaign_ids) ? rows[0].campaign_ids : [];
+    return ids.filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
 // ── Decidir qué hacer con un experimento a las 72h ──
 export async function decidirSuerteExperimento(exp) {
@@ -78,6 +98,64 @@ export async function revisarExperimentos() {
 
       await ExperimentsDB.actualizarEstado(exp.id, estadoNuevo, decision.razon, causaPausa);
 
+      // Auto-ejecución cuando modo autónomo está activo
+      const autoMode = await SystemState.isAutoMode().catch(() => false);
+      if (autoMode && decision.decision !== 'extender_7_dias') {
+        try {
+          const campaignIds = await encontrarCampanasDeExperimento(exp.id);
+
+          if (decision.decision === 'matar' && campaignIds.length) {
+            for (const cid of campaignIds) {
+              await CampaignManager.pausar(cid).catch(() => {});
+            }
+            await LearningsDB.guardar({
+              tipo: 'producto', contexto: `Auto-kill: ${exp.nombre}`,
+              accion: `Campañas pausadas automáticamente (${campaignIds.length})`,
+              resultado: decision.razon, exito: false,
+              hipotesis: decision.aprendizaje, tags: ['auto_kill', exp.nicho], relevancia: 8,
+            }).catch(() => {});
+          }
+
+          if (decision.decision === 'ajustar_precio' && decision.precio_nuevo && exp.stripe_product_id) {
+            const precioAnterior = exp.precio;
+            const { stripePriceId, stripePaymentLink, stripePaymentLinkId } =
+              await StripeConnector.crearProductoCompleto({
+                nombre: exp.nombre,
+                descripcion: `${exp.nombre} — precio ajustado`,
+                precio: decision.precio_nuevo,
+              });
+            await query(
+              `UPDATE experiments SET precio = $1, stripe_price_id = $2,
+               stripe_payment_link = $3, stripe_payment_link_id = $4,
+               actualizado_en = NOW() WHERE id = $5`,
+              [decision.precio_nuevo, stripePriceId, stripePaymentLink, stripePaymentLinkId, exp.id]
+            );
+            await LearningsDB.guardar({
+              tipo: 'precio', contexto: `Ajuste de precio: ${exp.nombre}`,
+              accion: `Precio bajado $${precioAnterior} → $${decision.precio_nuevo} (ScalingAgent automático)`,
+              resultado: 'Nuevo link de Stripe generado y guardado',
+              exito: true, hipotesis: decision.aprendizaje,
+              tags: ['precio', 'ajuste_automatico', exp.nicho], relevancia: 8,
+            }).catch(() => {});
+          }
+
+          if (decision.decision === 'escalar' && campaignIds.length) {
+            for (const cid of campaignIds) {
+              const nuevoPres = Math.min(40, (exp.metricas?.presupuesto || 10) * 1.5);
+              await CampaignManager.cambiarPresupuesto(cid, nuevoPres).catch(() => {});
+            }
+            await LearningsDB.guardar({
+              tipo: 'campana', contexto: `Auto-escalar: ${exp.nombre}`,
+              accion: `Presupuesto aumentado automáticamente por ScalingAgent`,
+              resultado: decision.razon, exito: true,
+              hipotesis: decision.aprendizaje, tags: ['auto_escalar', exp.nicho], relevancia: 7,
+            }).catch(() => {});
+          }
+        } catch (execErr) {
+          console.warn('[ScalingAgent] Error en auto-ejecución:', execErr.message);
+        }
+      }
+
       // Aprender de la experiencia
       await ProductsMemoryDB.aprenderDeExperimento({
         ...exp, aprendizaje: decision.aprendizaje,
@@ -87,13 +165,13 @@ export async function revisarExperimentos() {
       const iconos = { escalar: '🚀', matar: '💀', extender_7_dias: '⏳', ajustar_precio: '💰' };
       const icono = iconos[decision.decision] || '📊';
 
-      const metricas = exp.metricas || {};
+      const metricasNotif = exp.metricas || {};
       await TelegramConnector.notificar(
         `${icono} <b>Experimento: ${exp.nombre}</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
         `🎯 Nicho: ${exp.nicho}\n` +
         `💵 Precio: $${exp.precio} | Tipo: ${exp.tipo}\n` +
-        `📊 Ventas: ${metricas.ventas || 0} | Revenue: $${metricas.revenue || 0}\n` +
+        `📊 Ventas: ${metricasNotif.ventas || 0} | Revenue: $${metricasNotif.revenue || 0}\n` +
         `\n🤖 <b>Decisión: ${decision.decision.toUpperCase().replace(/_/g, ' ')}</b>\n` +
         `${decision.razon}\n` +
         (decision.precio_nuevo ? `\n💰 Precio nuevo sugerido: $${decision.precio_nuevo}` : '') +

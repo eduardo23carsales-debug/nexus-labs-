@@ -20,17 +20,18 @@ export const LeadsDB = {
   async guardar(lead) {
     const tel = clean(lead.telefono);
     const { rows } = await query(`
-      INSERT INTO leads (telefono, nombre, segmento, score, estado, fuente, creado_en, actualizado_en)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      INSERT INTO leads (telefono, nombre, email, segmento, score, estado, fuente, creado_en, actualizado_en)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
       ON CONFLICT (telefono) DO UPDATE SET
         nombre         = EXCLUDED.nombre,
+        email          = COALESCE(EXCLUDED.email, leads.email),
         segmento       = EXCLUDED.segmento,
         score          = EXCLUDED.score,
         estado         = COALESCE(EXCLUDED.estado, leads.estado),
         fuente         = EXCLUDED.fuente,
         actualizado_en = NOW()
       RETURNING *
-    `, [tel, lead.nombre, lead.segmento, lead.score || 'FRIO', lead.estado || ESTADOS.NUEVO, lead.fuente || 'web']);
+    `, [tel, lead.nombre, lead.email || null, lead.segmento, lead.score || 'FRIO', lead.estado || ESTADOS.NUEVO, lead.fuente || 'web']);
     return rows[0];
   },
 
@@ -128,6 +129,26 @@ export const LeadsDB = {
       tasa_cierre: total_leads > 0 ? +(cierres / total_leads * 100).toFixed(1) : 0,
       por_segmento,
     };
+  },
+
+  async conEmailSinCompra() {
+    try {
+      const { rows } = await query(`
+        SELECT l.telefono, l.nombre, l.email, l.segmento, l.creado_en
+        FROM leads l
+        WHERE l.email IS NOT NULL
+          AND l.estado NOT IN ('CERRADO', 'NO_INTERESA')
+          AND l.creado_en > NOW() - INTERVAL '30 days'
+          AND l.creado_en < NOW() - INTERVAL '23 hours'
+          AND NOT EXISTS (
+            SELECT 1 FROM customers c WHERE c.email = l.email
+          )
+      `);
+      return rows;
+    } catch (err) {
+      console.warn('[LeadsDB] Error en conEmailSinCompra:', err.message);
+      return [];
+    }
   },
 };
 

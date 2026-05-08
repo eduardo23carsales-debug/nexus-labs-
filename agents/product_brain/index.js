@@ -11,6 +11,10 @@ import { CampaignManager }         from '../../ads_engine/campaign-manager.js';
 import { ExperimentsDB }           from '../../memory/products.db.js';
 import { LearningsDB }             from '../../memory/learnings.db.js';
 import { query }                   from '../../config/database.js';
+import { SystemState }             from '../../config/system-state.js';
+import { investigarNicho, construirNichoDesdeIdea } from '../../market_research_agent/index.js';
+import { generarProducto }         from '../../product_engine/index.js';
+import { publicarConStripe }       from '../../product_engine/publisher.js';
 
 const SYSTEM = `Eres el estratega de productos digitales de Nexus Labs.
 Tu trabajo es analizar el contexto real del negocio y decidir cuál es el MEJOR próximo producto digital a crear y vender.
@@ -148,6 +152,31 @@ Si las campañas muestran tracción en un nicho, crea un producto para ESA audie
     } catch {
       console.warn('[ProductBrain] No se pudo parsear propuesta');
       return null;
+    }
+
+    // Auto-crear si modo autónomo activo y score suficientemente alto
+    const autoMode = await SystemState.isAutoMode().catch(() => false);
+    if (autoMode && nicho.score >= 85) {
+      console.log(`[ProductBrain] Auto-modo: creando "${nicho.nombre_producto}" (score ${nicho.score})`);
+      await TelegramConnector.notificar(
+        `🤖 <b>ProductBrain — Auto-creando producto</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📦 ${esc(nicho.nombre_producto)}\n` +
+        `⭐ Score: ${nicho.score}/100 — creando sin aprobación\n` +
+        `💡 ${esc(nicho.razon_ahora)}`
+      );
+      try {
+        const nichoCompleto = await construirNichoDesdeIdea(nicho);
+        const exp           = await generarProducto(nichoCompleto);
+        await publicarConStripe(exp.id);
+        return { nicho, autoCreado: true };
+      } catch (autoErr) {
+        console.error('[ProductBrain] Error auto-creando:', autoErr.message);
+        await TelegramConnector.notificar(
+          `⚠️ <b>ProductBrain auto-create falló</b>\n${esc(autoErr.message)}\nProponiendo a Eduardo en su lugar...`
+        );
+        // Fallback: proponer normalmente
+      }
     }
 
     // Guardar propuesta temporal para recuperar al aprobar

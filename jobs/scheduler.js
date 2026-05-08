@@ -82,6 +82,7 @@ export function iniciarScheduler() {
       await ResendConnector.procesarPagosNuevos();
       await ResendConnector.procesarCarritosAbandonados();
       await ResendConnector.procesarSecuenciaPostCompra();
+      await ResendConnector.procesarLeadsNoConvertidos();
       if (HotmartConnector.disponible()) {
         await ResendConnector.procesarVentasHotmart();
       }

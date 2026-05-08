@@ -343,3 +343,6 @@ INSERT INTO system_config (clave, valor, descripcion) VALUES
   ('max_escalar_pct',       '0.20', 'Máximo porcentaje de aumento de presupuesto por ciclo (0.20 = 20%)'),
   ('cpl_objetivo',          '5',    'CPL objetivo — por debajo de esto la campaña es buena (USD)')
 ON CONFLICT (clave) DO NOTHING;
+
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
