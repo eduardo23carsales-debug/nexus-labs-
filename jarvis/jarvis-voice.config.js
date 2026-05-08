@@ -965,6 +965,23 @@ const FUNCIONES_VAPI = [
       },
     },
   },
+
+  // ── MODO AUTÓNOMO (voz) ───────────────────────────
+  {
+    name:        'modo_autonomo',
+    description: 'Activa, desactiva o consulta el estado del modo autónomo de Jarvis. Cuando está activo, el Supervisor y el Analista operan solos sin pedir aprobación. Úsalo cuando Eduardo dice "toma el control autónomo", "opera solo", "activa el modo Jarvis", "desactiva el modo autónomo", "¿estás operando solo?", "¿está activo el modo autónomo?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        accion: {
+          type: 'string',
+          description: 'activar, desactivar, o estado',
+          enum: ['activar', 'desactivar', 'estado'],
+        },
+      },
+      required: ['accion'],
+    },
+  },
 ];
 
 // ── Config completa de VAPI ───────────────────────────

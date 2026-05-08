@@ -69,6 +69,20 @@ export const SupervisorMemory = {
     return rows;
   },
 
+  // Decisiones de escalado de hace 3-7 días sin cierre de aprendizaje registrado
+  async cargarEscaladosRecientes() {
+    await ensureTable();
+    const { rows } = await query(`
+      SELECT id, campana_id, campana_nombre, datos_snapshot, nuevo_presupuesto, created_at
+      FROM supervisor_decisions
+      WHERE decision = 'escalar'
+        AND resultado = 'ejecutado'
+        AND created_at > NOW() - INTERVAL '7 days'
+        AND created_at < NOW() - INTERVAL '3 days'
+    `);
+    return rows;
+  },
+
   async resumenSemanal() {
     await ensureTable();
     const { rows } = await query(`

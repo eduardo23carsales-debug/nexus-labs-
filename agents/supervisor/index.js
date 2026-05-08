@@ -11,6 +11,7 @@ import { CampaignManager }                                  from '../../ads_engi
 import { generarSlideshowParaCampana }                      from '../../ads_engine/campaign-creator.js';
 import { SupervisorMemory }                                 from './memory.js';
 import { LearningsDB }                                      from '../../memory/learnings.db.js';
+import { SystemState }                                      from '../../config/system-state.js';
 import BUSINESS                                             from '../../config/business.config.js';
 import { FinancialControl }                                 from '../../financial_control/index.js';
 
@@ -108,6 +109,36 @@ PRINCIPIOS:
 - Horario: si hay datos de horas pico → sugiere dayparting
 - Explica en español claro (máx 120 chars)`;
 
+// Cierra el loop de aprendizaje: compara CPL antes/después de escalar
+async function cerrarLoopAprendizaje(datosActuales) {
+  try {
+    const escalados = await SupervisorMemory.cargarEscaladosRecientes();
+    for (const d of escalados) {
+      const campanaActual = datosActuales.find(c => c.id === d.campana_id);
+      if (!campanaActual) continue;
+      const cplAntes  = d.datos_snapshot?.ultimos_7_dias?.cpl;
+      const cplAhora  = campanaActual?.ultimos_7_dias?.cpl;
+      if (!cplAntes || !cplAhora) continue;
+      const mejoro = cplAhora < cplAntes;
+      const pct    = ((cplAhora - cplAntes) / cplAntes * 100).toFixed(1);
+      await LearningsDB.guardar({
+        tipo:      'campana',
+        contexto:  `Escalado ${d.campana_nombre}: presupuesto → $${d.nuevo_presupuesto}/día`,
+        accion:    `Subir presupuesto al siguiente paso de la escalera`,
+        resultado: `CPL ${mejoro ? 'bajó' : 'subió'}: $${cplAntes} → $${cplAhora} (${mejoro ? '' : '+'}${pct}%)`,
+        exito:     mejoro,
+        hipotesis: mejoro
+          ? `Escalar ${d.campana_nombre} mejoró el CPL — repetir cuando condiciones similares`
+          : `Escalar ${d.campana_nombre} empeoró el CPL — ser más conservador con escaladas`,
+        tags:      ['escalado', 'resultado_real', d.campana_nombre.toLowerCase().replace(/\s+/g, '_')],
+        relevancia: mejoro ? 7 : 9,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[Supervisor] Loop aprendizaje:', err.message);
+  }
+}
+
 export async function ejecutarSupervisor() {
   console.log('[Supervisor] Iniciando análisis IA...');
 
@@ -150,19 +181,34 @@ export async function ejecutarSupervisor() {
       };
     }));
 
-    const [historial, hora, dia, ts] = await Promise.all([
+    // Cerrar loop de aprendizaje (no bloquea el análisis)
+    cerrarLoopAprendizaje(datosCampanas).catch(() => {});
+
+    const [historial, learnings, autoMode, hora, dia, ts] = await Promise.all([
       SupervisorMemory.cargarHistorial(20),
+      LearningsDB.ultimos(8).catch(() => []),
+      SystemState.isAutoMode().catch(() => false),
       Promise.resolve(horaET()),
       Promise.resolve(diaET()),
       Promise.resolve(tsET()),
     ]);
     const dentroHorario = hora >= 9 && hora < 19;
 
+    const learningsCtx = learnings.length
+      ? learnings.map(l =>
+          `- [${l.exito ? '✅' : '❌'} ${l.tipo}] ${l.accion} → ${l.resultado}${l.hipotesis ? ` (${l.hipotesis})` : ''}`
+        ).join('\n')
+      : 'Sin aprendizajes registrados aún.';
+
     const prompt = `CONTEXTO ACTUAL:
 Hora: ${ts} (${hora}h ET — ${dia})
+Modo autónomo: ${autoMode ? '🤖 ACTIVO — ejecuta TODO con confianza ≥ 60%' : '❌ inactivo — solo acciones de riesgo crítico se auto-ejecutan'}
 ${dentroHorario
   ? '✅ Dentro de horario activo — cambios de presupuesto permitidos'
   : '⚠️ FUERA DE HORARIO ACTIVO — solo "pausar" si hay emergencia real, sino "mantener"'}
+
+APRENDIZAJES PREVIOS DEL SISTEMA (qué funcionó y qué no — úsalos para mejorar decisiones):
+${learningsCtx}
 
 CAMPAÑAS ACTIVAS — datos completos con quality scores, dispositivo, frecuencia y ROAS:
 ${JSON.stringify(datosExtendidos, null, 2)}
@@ -229,7 +275,10 @@ Devuelve ÚNICAMENTE un JSON array con una decisión por campaña. Para "refresh
         continue;
       }
 
-      if (d.autonomo) {
+      // En modo autónomo, ejecutar todo con confianza >= 60% sin pedir permiso
+      const ejecutarAhora = d.autonomo || (autoMode && d.confianza >= 60);
+
+      if (ejecutarAhora) {
         try {
           if (d.decision === 'pausar') {
             await CampaignManager.pausar(d.campana_id);
@@ -279,6 +328,7 @@ Devuelve ÚNICAMENTE un JSON array con una decisión por campaña. Para "refresh
           await SupervisorMemory.marcarResultado(decisionId, 'error_ejecucion');
         }
       } else {
+        // Modo manual: proponer a Eduardo con botones de aprobación
         propuestas.push({ ...d, decisionId });
         console.log(`[Supervisor] ⏳ ${d.decision} — ${d.campana_nombre} → esperando Eduardo`);
       }

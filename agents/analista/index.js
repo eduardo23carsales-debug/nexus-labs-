@@ -9,10 +9,12 @@ import { TelegramConnector, esc } from '../../connectors/telegram.connector.js';
 import { PlansDB }                from '../../memory/plans.db.js';
 import { LeadsDB }                from '../../memory/leads.db.js';
 import { CampaignManager }        from '../../ads_engine/campaign-manager.js';
+import { ejecutarPlan }           from '../ejecutor/index.js';
 import { llamarBriefing }         from '../../call_agent/caller.js';
 import { ClientDB }               from '../../crm/client.db.js';
 import { LearningsDB }            from '../../memory/learnings.db.js';
 import { ExperimentsDB }          from '../../memory/products.db.js';
+import { SystemState }            from '../../config/system-state.js';
 import ENV                        from '../../config/env.js';
 import BUSINESS                   from '../../config/business.config.js';
 
@@ -76,15 +78,24 @@ export async function ejecutarAnalista() {
     plan._resumen_voz = plan.resumen_voz;
     await PlansDB.guardar(plan);
 
-    // Enviar con botones de aprobación
-    const teclado = {
-      inline_keyboard: [[
-        { text: '✅ Aprobar plan', callback_data: 'aprobar_plan' },
-        { text: '❌ Ignorar',      callback_data: 'ignorar_plan' },
-      ]]
-    };
+    const autoMode = await SystemState.isAutoMode().catch(() => false);
 
-    await TelegramConnector.notificar(lineas.join('\n'), { reply_markup: teclado });
+    if (autoMode) {
+      // Modo autónomo — ejecutar el plan directamente sin esperar aprobación
+      lineas.push(`\n🤖 <b>Modo autónomo activo — ejecutando ahora...</b>`);
+      await TelegramConnector.notificar(lineas.join('\n'));
+      console.log('[Analista] Auto-ejecutando plan (modo autónomo)...');
+      await ejecutarPlan(plan);
+    } else {
+      // Modo normal — enviar con botones de aprobación
+      const teclado = {
+        inline_keyboard: [[
+          { text: '✅ Aprobar plan', callback_data: 'aprobar_plan' },
+          { text: '❌ Ignorar',      callback_data: 'ignorar_plan' },
+        ]]
+      };
+      await TelegramConnector.notificar(lineas.join('\n'), { reply_markup: teclado });
+    }
     console.log('[Analista] Plan enviado a Telegram');
 
     // Ana llama a Eduardo en 2 min

@@ -31,10 +31,12 @@ import { ExperimentsDB, ProductsMemoryDB }      from '../memory/products.db.js';
 import { evaluarNicho }                         from '../scaling_agent/index.js';
 import { validarIdea, verificarResultado }      from '../validation_agent/index.js';
 import ENV                                      from '../config/env.js';
+import BUSINESS                                 from '../config/business.config.js';
 import { ProjectsDB }                           from '../crm/projects.db.js';
 import { TwilioConnector }                      from '../connectors/twilio.connector.js';
 import { JarvisMemoryDB }                       from '../memory/jarvis.db.js';
 import { SystemConfigDB }                       from '../memory/config.db.js';
+import { SystemState }                          from '../config/system-state.js';
 import { GoogleCalendarConnector }              from '../connectors/google-calendar.connector.js';
 import { LearningsDB }                          from '../memory/learnings.db.js';
 import { CallsDB }                              from '../memory/calls.db.js';
@@ -1242,6 +1244,39 @@ Ordena los creativos de mejor a peor CPL para saber cuál duplicar y cuál apaga
         campana: { type: 'string', description: 'Nombre parcial o ID de la campaña. Si no se da, usa la de mayor gasto.' },
         periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d', enum: ['last_7d', 'last_14d', 'last_30d'] },
       },
+    },
+  },
+
+  // ── MODO AUTÓNOMO ─────────────────────────────────────
+  {
+    name: 'modo_autonomo',
+    description: `Activa o desactiva el modo autónomo de Jarvis.
+Cuando está ACTIVO, el sistema opera solo sin pedir aprobación:
+- El Supervisor ejecuta TODAS sus decisiones (pausa, escala, refresh) sin esperar a Eduardo
+- El Analista implementa el plan cada mañana sin botones de aprobación
+- Solo se respetan los límites de riesgo hard-coded (nunca pasa $${BUSINESS?.presupuestoMaxDia || 30}/día)
+
+Cuando está INACTIVO, el sistema vuelve al modo normal: propone y espera aprobación de Eduardo.
+
+Úsalo cuando Eduardo diga:
+- "toma el control autónomo"
+- "opera solo de ahora en adelante"
+- "modo jarvis activado"
+- "gestiona todo tú solo"
+- "apaga el modo autónomo"
+- "vuelve a pedir permiso"
+- "¿está el modo autónomo activo?"
+- "¿estás operando solo?"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        accion: {
+          type: 'string',
+          description: 'activar o desactivar. Si Eduardo pregunta el estado, usa "estado".',
+          enum: ['activar', 'desactivar', 'estado'],
+        },
+      },
+      required: ['accion'],
     },
   },
 ];
@@ -3979,6 +4014,35 @@ Responde en español, en tono directo como un socio estratégico, no como consul
     const msg = lineas.join('\n');
     await notif(msg);
     return `Desglose de "${campanaNombre}" completado — demografía, placement y frecuencia. Ver Telegram para los detalles.`;
+  },
+
+  async modo_autonomo({ accion }) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    if (accion === 'estado') {
+      const activo = await SystemState.isAutoMode();
+      const msg = activo
+        ? `🤖 <b>Modo autónomo: ACTIVO</b>\nJarvis opera solo — pausa, escala y ejecuta planes sin pedir aprobación.\nLímites de riesgo siguen activos ($${BUSINESS.presupuestoMaxDia}/día máx).`
+        : `🧑 <b>Modo autónomo: INACTIVO</b>\nJarvis opera en modo normal — propone acciones y espera aprobación de Eduardo.`;
+      await notif(msg);
+      return msg;
+    }
+
+    if (accion === 'activar') {
+      await SystemState.activarAutoMode();
+      const msg = `🤖 <b>Modo autónomo ACTIVADO</b>\n\nJarvis ahora opera de forma completamente autónoma:\n• Supervisor ejecuta pausas, escalas y refreshes solo\n• Analista implementa el plan cada mañana sin esperar botones\n• Límites de riesgo siguen activos (max $${BUSINESS.presupuestoMaxDia}/día)\n• Escala de presupuesto: ${BUSINESS.escalera.pasos.join(' → ')} USD/día\n\nPara volver al modo normal escribe "desactiva el modo autónomo".`;
+      await notif(msg);
+      return msg;
+    }
+
+    if (accion === 'desactivar') {
+      await SystemState.desactivarAutoMode();
+      const msg = `🧑 <b>Modo autónomo DESACTIVADO</b>\n\nJarvis vuelve al modo normal — todas las decisiones de campaña pasarán por tu aprobación antes de ejecutarse.`;
+      await notif(msg);
+      return msg;
+    }
+
+    return `Acción no reconocida: "${accion}". Usa: activar, desactivar, estado.`;
   },
 };
 

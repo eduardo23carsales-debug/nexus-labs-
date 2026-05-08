@@ -17,7 +17,7 @@ export async function initSystemState() {
   // Insertar valores por defecto si no existen
   await query(`
     INSERT INTO system_state (key, value)
-    VALUES ('kill_switch', 'false'), ('safe_mode', 'false')
+    VALUES ('kill_switch', 'false'), ('safe_mode', 'false'), ('auto_mode', 'false')
     ON CONFLICT (key) DO NOTHING
   `);
 }
@@ -37,15 +37,20 @@ async function setState(key, value) {
 export const SystemState = {
   async isKillSwitch() { return getState('kill_switch'); },
   async isSafeMode()   { return getState('safe_mode');   },
+  async isAutoMode()   { return getState('auto_mode');   },
 
   async activarKillSwitch()    { await setState('kill_switch', true);  },
   async desactivarKillSwitch() { await setState('kill_switch', false); },
   async activarSafeMode()      { await setState('safe_mode', true);    },
   async desactivarSafeMode()   { await setState('safe_mode', false);   },
+  async activarAutoMode()      { await setState('auto_mode', true);    },
+  async desactivarAutoMode()   { await setState('auto_mode', false);   },
 
   async getStatus() {
-    const [kill, safe] = await Promise.all([getState('kill_switch'), getState('safe_mode')]);
-    return { kill_switch: kill, safe_mode: safe };
+    const [kill, safe, auto_] = await Promise.all([
+      getState('kill_switch'), getState('safe_mode'), getState('auto_mode'),
+    ]);
+    return { kill_switch: kill, safe_mode: safe, auto_mode: auto_ };
   },
 };
 
