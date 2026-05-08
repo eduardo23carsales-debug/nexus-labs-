@@ -391,6 +391,161 @@ export const MetaConnector = {
     }
   },
 
+  // ── CONTROL GRANULAR DE ADSETS Y ADS ──────────────
+
+  async pausarAdSet(adsetId)  { return this.post(`/${adsetId}`, { status: 'PAUSED' }); },
+  async activarAdSet(adsetId) { return this.post(`/${adsetId}`, { status: 'ACTIVE' }); },
+  async pausarAd(adId)        { return this.post(`/${adId}`,    { status: 'PAUSED' }); },
+  async activarAd(adId)       { return this.post(`/${adId}`,    { status: 'ACTIVE' }); },
+
+  async cambiarPresupuestoAdSet(adsetId, presupuestoDia) {
+    return this.post(`/${adsetId}`, { daily_budget: Math.round(presupuestoDia * 100) });
+  },
+
+  // ── QUALITY SCORES — ranking de calidad de Meta ────
+  // Meta califica cada ad: quality_ranking, engagement_rate_ranking, conversion_rate_ranking
+  // Valores: ABOVE_AVERAGE, AVERAGE, BELOW_AVERAGE_10/20/35
+  async getQualityScores(campanaId, datePreset = 'last_7d') {
+    try {
+      const data = await this.get(`/${campanaId}/insights`, {
+        date_preset: datePreset,
+        level:       'ad',
+        fields:      'ad_id,ad_name,spend,quality_ranking,engagement_rate_ranking,conversion_rate_ranking,impressions',
+        limit:       50,
+      });
+      const SCORE = { ABOVE_AVERAGE: 5, AVERAGE: 3, BELOW_AVERAGE_10: 2, BELOW_AVERAGE_20: 1, BELOW_AVERAGE_35: 0, UNKNOWN: null };
+      const LABEL = { ABOVE_AVERAGE: '🟢 Por encima del promedio', AVERAGE: '🟡 Promedio', BELOW_AVERAGE_10: '🟠 Bajo (top 10%)', BELOW_AVERAGE_20: '🔴 Muy bajo (top 20%)', BELOW_AVERAGE_35: '🔴 Crítico (top 35%)', UNKNOWN: '⚪ Sin datos' };
+      return (data.data || []).map(row => ({
+        ad_id:       row.ad_id,
+        ad_nombre:   row.ad_name,
+        spend:       parseFloat(row.spend || 0),
+        impressions: parseInt(row.impressions || 0),
+        quality:          { raw: row.quality_ranking,           score: SCORE[row.quality_ranking],           label: LABEL[row.quality_ranking] },
+        engagement:       { raw: row.engagement_rate_ranking,   score: SCORE[row.engagement_rate_ranking],   label: LABEL[row.engagement_rate_ranking] },
+        conversion:       { raw: row.conversion_rate_ranking,   score: SCORE[row.conversion_rate_ranking],   label: LABEL[row.conversion_rate_ranking] },
+        score_global:     [SCORE[row.quality_ranking], SCORE[row.engagement_rate_ranking], SCORE[row.conversion_rate_ranking]].filter(s => s !== null).reduce((a, b) => a + b, 0),
+        alerta:           [row.quality_ranking, row.engagement_rate_ranking, row.conversion_rate_ranking].some(r => r?.includes('BELOW_AVERAGE')),
+      }));
+    } catch (err) {
+      console.warn('[Meta] Error getQualityScores:', err.message);
+      return [];
+    }
+  },
+
+  // ── BREAKDOWN POR DISPOSITIVO — mobile vs desktop ──
+  async getBreakdownDispositivo(campanaId, datePreset = 'last_7d') {
+    try {
+      const data = await this.get(`/${campanaId}/insights`, {
+        date_preset: datePreset,
+        fields:      'spend,clicks,impressions,actions,ctr,cpm',
+        breakdowns:  'device_platform',
+        limit:       20,
+      });
+      return (data.data || []).map(row => {
+        const actions = row.actions || [];
+        const leads   = parseInt(actions.find(a => a.action_type === 'lead')?.value || 0);
+        const visitas = parseInt(actions.find(a => a.action_type === 'landing_page_view')?.value || 0);
+        const compras = parseInt(actions.find(a => a.action_type === 'purchase')?.value || 0);
+        const conv    = leads > 0 ? leads : (compras > 0 ? compras : visitas);
+        const spend   = parseFloat(row.spend || 0);
+        return {
+          dispositivo: row.device_platform,
+          spend, leads, compras, visitas_landing: visitas, conversiones: conv,
+          clicks:      parseInt(row.clicks || 0),
+          impressions: parseInt(row.impressions || 0),
+          cpl:         conv > 0 ? +(spend / conv).toFixed(2) : null,
+          ctr:         parseFloat(row.ctr || 0),
+          cpm:         parseFloat(row.cpm || 0),
+        };
+      });
+    } catch (err) {
+      console.warn('[Meta] Error getBreakdownDispositivo:', err.message);
+      return [];
+    }
+  },
+
+  // ── BREAKDOWN HORARIO — a qué horas convierte ──────
+  async getBreakdownHorario(campanaId, datePreset = 'last_7d') {
+    try {
+      const data = await this.get(`/${campanaId}/insights`, {
+        date_preset: datePreset,
+        fields:      'spend,clicks,impressions,actions,ctr',
+        breakdowns:  'hourly_stats_aggregated_by_advertiser_time_zone',
+        limit:       50,
+      });
+      return (data.data || []).map(row => {
+        const actions = row.actions || [];
+        const leads   = parseInt(actions.find(a => a.action_type === 'lead')?.value || 0);
+        const visitas = parseInt(actions.find(a => a.action_type === 'landing_page_view')?.value || 0);
+        const conv    = leads > 0 ? leads : visitas;
+        const spend   = parseFloat(row.spend || 0);
+        const hora    = parseInt(row.hourly_stats_aggregated_by_advertiser_time_zone || 0);
+        return {
+          hora, spend,
+          leads, visitas_landing: visitas, conversiones: conv,
+          clicks:      parseInt(row.clicks || 0),
+          impressions: parseInt(row.impressions || 0),
+          cpl:         conv > 0 ? +(spend / conv).toFixed(2) : null,
+          ctr:         parseFloat(row.ctr || 0),
+        };
+      }).sort((a, b) => a.hora - b.hora);
+    } catch (err) {
+      console.warn('[Meta] Error getBreakdownHorario:', err.message);
+      return [];
+    }
+  },
+
+  // ── ROAS REAL — retorno sobre inversión publicitaria ─
+  async getRoas(campanaId, datePreset = 'last_7d') {
+    try {
+      const data = await this.get(`/${campanaId}/insights`, {
+        date_preset: datePreset,
+        fields:      'spend,actions,action_values,purchase_roas',
+      });
+      const row          = data.data?.[0] || {};
+      const actions      = row.actions || [];
+      const actionValues = row.action_values || [];
+      const spend        = parseFloat(row.spend || 0);
+      const compras      = parseInt(actions.find(a => a.action_type === 'purchase')?.value || 0);
+      const revenue      = parseFloat(actionValues.find(a => a.action_type === 'purchase')?.value || 0);
+      const purchaseRoas = parseFloat(row.purchase_roas?.[0]?.value || 0);
+      return {
+        spend,
+        compras,
+        revenue_atribuido: revenue,
+        roas:              purchaseRoas > 0 ? purchaseRoas : (spend > 0 && revenue > 0 ? +(revenue / spend).toFixed(2) : null),
+        ganancia_neta:     revenue - spend,
+        rentable:          revenue > spend,
+      };
+    } catch (err) {
+      console.warn('[Meta] Error getRoas:', err.message);
+      return null;
+    }
+  },
+
+  // ── DELIVERY INSIGHTS — por qué no entrega un ad ───
+  async getDeliveryInsights(campanaId) {
+    try {
+      const data = await this.get(`/${campanaId}/insights`, {
+        date_preset: 'last_7d',
+        level:       'adset',
+        fields:      'adset_id,adset_name,delivery_info,effective_status,spend,impressions',
+        limit:       25,
+      });
+      return (data.data || []).map(row => ({
+        adset_id:    row.adset_id,
+        adset_nombre: row.adset_name,
+        estado:      row.effective_status,
+        delivery:    row.delivery_info || null,
+        spend:       parseFloat(row.spend || 0),
+        impressions: parseInt(row.impressions || 0),
+      }));
+    } catch (err) {
+      console.warn('[Meta] Error getDeliveryInsights:', err.message);
+      return [];
+    }
+  },
+
   // ── SLIDESHOW VIDEO ────────────────────────────────
 
   // Crea un video slideshow en Meta a partir de URLs de imágenes

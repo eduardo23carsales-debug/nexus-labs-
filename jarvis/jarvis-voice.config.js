@@ -871,6 +871,100 @@ const FUNCIONES_VAPI = [
       },
     },
   },
+
+  // ── CALIDAD, CONTROL GRANULAR Y ESCALADO (voz) ────
+  {
+    name:        'quality_scores',
+    description: 'Calidad de los anuncios según Meta: ranking de calidad, engagement y conversión por creativo. Úsalo cuando Eduardo dice "¿qué calidad tienen mis anuncios?", "¿están penalizados mis creativos?", "quality score de Meta", "¿Meta dice que son buenos?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial de la campaña. Opcional.' },
+      },
+    },
+  },
+
+  {
+    name:        'breakdown_dispositivo',
+    description: 'Compara el rendimiento en móvil vs desktop: CPL, impresiones y gasto por dispositivo. Úsalo cuando Eduardo dice "¿funciona mejor en móvil?", "¿desktop convierte?", "breakdown por dispositivo", "¿dónde se gasta más?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial de la campaña. Opcional.' },
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d' },
+      },
+    },
+  },
+
+  {
+    name:        'breakdown_horario',
+    description: 'Muestra en qué horas del día llegan más leads y hay menor CPL. Úsalo cuando Eduardo dice "¿a qué hora convierte más?", "horario con más leads", "¿cuándo debo pausar los ads?", "dayparting".',
+    parameters: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial de la campaña. Opcional.' },
+      },
+    },
+  },
+
+  {
+    name:        'pausar_adset',
+    description: 'Pausa un Ad Set específico por nombre dentro de cualquier campaña. Úsalo cuando Eduardo dice "pausa el adset X", "detén el segmento Y", "pausa ese grupo de anuncios".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string', description: 'Nombre parcial del Ad Set a pausar' },
+      },
+      required: ['nombre'],
+    },
+  },
+
+  {
+    name:        'pausar_ad',
+    description: 'Pausa un anuncio específico por nombre. Úsalo cuando Eduardo dice "pausa el anuncio X", "detén ese creativo", "pausa el ad que dice [copy]".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string', description: 'Nombre parcial del anuncio a pausar' },
+      },
+      required: ['nombre'],
+    },
+  },
+
+  {
+    name:        'refresh_creativo',
+    description: 'Detecta fatiga creativa (frecuencia alta) y genera un nuevo slideshow automáticamente para renovar los anuncios. Úsalo cuando Eduardo dice "refresca los creativos", "fatiga creativa", "hay que cambiar los ads", "el público ya los vio mucho".',
+    parameters: {
+      type: 'object',
+      properties: {
+        campana:         { type: 'string', description: 'Nombre parcial de la campaña. Opcional.' },
+        nombre_producto: { type: 'string', description: 'Nombre del producto para generar nuevas imágenes. Opcional.' },
+        nicho:           { type: 'string', description: 'Nicho del producto. Opcional.' },
+      },
+    },
+  },
+
+  {
+    name:        'analisis_breakeven',
+    description: 'Calcula el CPL máximo que podemos pagar para no perder dinero y compara contra el CPL actual de cada campaña. Úsalo cuando Eduardo dice "¿estamos ganando o perdiendo?", "¿cuál es el break even?", "¿cuánto podemos pagar por lead?", "análisis de rentabilidad".',
+    parameters: {
+      type: 'object',
+      properties: {
+        periodo: { type: 'string', description: 'Período: last_7d (default), last_14d, last_30d' },
+      },
+    },
+  },
+
+  {
+    name:        'escalar_escalera',
+    description: 'Sube el presupuesto al siguiente paso de la escalera segura: 10→20→40→80→150→300 USD/día, solo si el CPL está dentro del objetivo. Úsalo cuando Eduardo dice "sube el presupuesto al siguiente nivel", "escala la campaña", "siguiente paso en la escalera", "¿podemos escalar?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        campana: { type: 'string', description: 'Nombre parcial de la campaña a escalar. Opcional — usa la de menor CPL si no se especifica.' },
+      },
+    },
+  },
 ];
 
 // ── Config completa de VAPI ───────────────────────────

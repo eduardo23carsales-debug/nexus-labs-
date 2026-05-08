@@ -958,6 +958,81 @@ Incluye desglose por producto y ROI de cada campaña.
     },
   },
 
+  // ── CONTROL GRANULAR + CALIDAD + OPTIMIZACIÓN META ─
+  {
+    name: 'quality_scores',
+    description: `Muestra el Quality Score de cada anuncio según Meta: calidad del ad, tasa de engagement, tasa de conversión.
+Si Meta le da score bajo a tu anuncio, te cobra más y te da menos alcance.
+Úsalo cuando Eduardo diga "¿por qué el CPM subió?", "¿Meta está penalizando mis ads?", "¿qué calidad tienen mis anuncios?", "quality score".`,
+    input_schema: { type: 'object', properties: {
+      campana: { type: 'string', description: 'Nombre parcial o ID. Si no se da, usa la de mayor gasto.' },
+      periodo: { type: 'string', enum: ['last_7d', 'last_14d', 'last_30d'] },
+    }},
+  },
+  {
+    name: 'breakdown_dispositivo',
+    description: `Muestra rendimiento mobile vs desktop: cuál gasta más, cuál convierte mejor, cuál tiene mejor CTR.
+Crítico si la landing no está optimizada para móvil.
+Úsalo cuando Eduardo diga "¿funciona en mobile?", "¿el problema es el teléfono?", "mobile vs desktop", "¿cuál dispositivo convierte?".`,
+    input_schema: { type: 'object', properties: {
+      campana: { type: 'string' },
+      periodo: { type: 'string', enum: ['last_7d', 'last_14d', 'last_30d'] },
+    }},
+  },
+  {
+    name: 'breakdown_horario',
+    description: `Muestra a qué horas del día convierten mejor los anuncios. Permite activar dayparting: correr ads solo en las horas rentables.
+Úsalo cuando Eduardo diga "¿a qué hora convierten más?", "mejores horas para los ads", "dayparting", "¿cuándo hay más leads?".`,
+    input_schema: { type: 'object', properties: {
+      campana: { type: 'string' },
+      periodo: { type: 'string', enum: ['last_7d', 'last_14d', 'last_30d'] },
+    }},
+  },
+  {
+    name: 'pausar_adset',
+    description: `Pausa un adset específico sin tocar el resto de la campaña.
+Úsalo cuando Eduardo diga "pausa el adset de hombres mayores", "detén ese segmento", "pausa el adset X".`,
+    input_schema: { type: 'object', properties: {
+      campana:      { type: 'string', description: 'Nombre parcial de la campaña' },
+      nombre_adset: { type: 'string', description: 'Nombre parcial del adset a pausar' },
+    }, required: ['nombre_adset'] },
+  },
+  {
+    name: 'pausar_ad',
+    description: `Pausa un anuncio específico sin tocar el adset ni la campaña.
+Úsalo cuando Eduardo diga "pausa el anuncio de urgencia", "apaga ese creativo", "pausa el ad X".`,
+    input_schema: { type: 'object', properties: {
+      campana:    { type: 'string', description: 'Nombre parcial de la campaña' },
+      nombre_ad:  { type: 'string', description: 'Nombre parcial del anuncio a pausar' },
+    }, required: ['nombre_ad'] },
+  },
+  {
+    name: 'refresh_creativo',
+    description: `Detecta fatiga en los creativos de una campaña (frecuencia > 3.5) y genera un nuevo slideshow automáticamente para reemplazarlos.
+Úsalo cuando Eduardo diga "rota los creativos", "la gente ya vio el anuncio", "refresca los ads", "hay fatiga en las campañas".`,
+    input_schema: { type: 'object', properties: {
+      campana: { type: 'string', description: 'Nombre parcial. Si no se da, revisa todas.' },
+    }},
+  },
+  {
+    name: 'analisis_breakeven',
+    description: `Calcula el punto de break-even de las campañas: a qué CPL dejan de ser rentables, cuántas ventas necesitas para cubrir el gasto, y si el ROAS actual es suficiente.
+Úsalo cuando Eduardo diga "¿estamos ganando dinero?", "¿cuándo es rentable?", "break-even", "¿a qué CPL conviene escalar?".`,
+    input_schema: { type: 'object', properties: {
+      precio_producto: { type: 'number', description: 'Precio del producto en USD. Si no se da, usa el configurado.' },
+      periodo:         { type: 'string', enum: ['last_7d', 'last_14d', 'last_30d'] },
+    }},
+  },
+  {
+    name: 'escalar_escalera',
+    description: `Escala una campaña al siguiente paso de la escalera de presupuesto ($10→$20→$40→$80→$150→$300) con validación de CPL antes de subir.
+Nunca salta pasos para no quemar el algoritmo de Meta.
+Úsalo cuando Eduardo diga "escala con cuidado", "súbele paso a paso", "escala en escalera", "siguiente nivel de presupuesto".`,
+    input_schema: { type: 'object', properties: {
+      campana: { type: 'string', description: 'Nombre parcial o ID de la campaña' },
+    }, required: ['campana'] },
+  },
+
   // ── BIBLIOTECA DE CREATIVOS Y AUDIENCIAS META ─────
   {
     name: 'ver_biblioteca_meta',
@@ -3056,6 +3131,305 @@ export const TOOL_HANDLERS = {
     const mensaje = lineas.join('\n');
     await notif(mensaje);
     return mensaje.replace(/<[^>]+>/g, '');
+  },
+
+  // ── CONTROL GRANULAR + CALIDAD + OPTIMIZACIÓN ─────
+
+  async quality_scores({ campana = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    let campanaId, campanaNombre;
+    if (campana) {
+      const list = await MetaConnector.getCampanas(false);
+      const match = list.find(c => c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase()));
+      if (!match) return `No encontré campaña con "${campana}".`;
+      campanaId = match.id; campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas(periodo);
+      if (!todas.length) return 'No hay campañas con datos.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id; campanaNombre = top.campana_nombre;
+    }
+    const scores = await MetaConnector.getQualityScores(campanaId, periodo);
+    if (!scores.length) return `Sin datos de quality score para "${campanaNombre}". Necesita mínimo ~500 impresiones por ad.`;
+
+    const ordenados = [...scores].sort((a, b) => b.score_global - a.score_global);
+    const lineas = [
+      `⭐ <b>Quality Scores — ${esc(campanaNombre)}</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      `<i>Meta califica cada ad: si el score es bajo, Meta te cobra más y te da menos alcance.</i>`,
+      '',
+    ];
+    ordenados.forEach((s, i) => {
+      const alerta = s.alerta ? ' ⚠️' : '';
+      lineas.push(`${i === 0 ? '🏆' : `#${i + 1}`} <b>${esc(s.ad_nombre)}</b>${alerta}`);
+      lineas.push(`   Calidad: ${s.quality.label}`);
+      lineas.push(`   Engagement: ${s.engagement.label}`);
+      lineas.push(`   Conversión: ${s.conversion.label}`);
+      lineas.push(`   Gasto: $${s.spend.toFixed(2)} | Score global: ${s.score_global}/15`);
+    });
+    const conAlerta = scores.filter(s => s.alerta).length;
+    if (conAlerta) lineas.push(`\n⚠️ ${conAlerta} ad(s) por debajo del promedio — considera pausarlos y generar nuevos creativos.`);
+    await notif(lineas.join('\n'));
+    return `${scores.length} ads analizados. ${conAlerta} con quality score bajo. Ver Telegram.`;
+  },
+
+  async breakdown_dispositivo({ campana = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    let campanaId, campanaNombre;
+    if (campana) {
+      const list = await MetaConnector.getCampanas(false);
+      const match = list.find(c => c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase()));
+      if (!match) return `No encontré campaña con "${campana}".`;
+      campanaId = match.id; campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas(periodo);
+      if (!todas.length) return 'No hay datos.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id; campanaNombre = top.campana_nombre;
+    }
+    const data = await MetaConnector.getBreakdownDispositivo(campanaId, periodo);
+    if (!data.length) return `Sin datos de dispositivo para "${campanaNombre}".`;
+    const gastoTotal = data.reduce((s, r) => s + r.spend, 0);
+    const lineas = [
+      `📱 <b>Mobile vs Desktop — ${esc(campanaNombre)}</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+    ];
+    data.sort((a, b) => b.spend - a.spend).forEach(d => {
+      const pct     = gastoTotal > 0 ? ((d.spend / gastoTotal) * 100).toFixed(0) : 0;
+      const cplStr  = d.cpl !== null ? `$${d.cpl} CPL` : 'sin conv.';
+      const emoji   = d.dispositivo === 'mobile' ? '📱' : d.dispositivo === 'desktop' ? '💻' : '📺';
+      lineas.push(`${emoji} <b>${d.dispositivo}</b>: $${d.spend.toFixed(2)} (${pct}%) | ${cplStr} | CTR ${d.ctr.toFixed(2)}% | ${d.conversiones} conv.`);
+    });
+    const mobile  = data.find(d => d.dispositivo === 'mobile');
+    const desktop = data.find(d => d.dispositivo === 'desktop');
+    if (mobile && desktop && mobile.cpl && desktop.cpl && mobile.cpl > desktop.cpl * 1.5) {
+      lineas.push(`\n⚠️ Mobile convierte ${((mobile.cpl / desktop.cpl - 1) * 100).toFixed(0)}% peor que desktop. Verifica que la landing sea mobile-friendly.`);
+    }
+    await notif(lineas.join('\n'));
+    return `Breakdown dispositivo completado para "${campanaNombre}". Ver Telegram.`;
+  },
+
+  async breakdown_horario({ campana = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    let campanaId, campanaNombre;
+    if (campana) {
+      const list = await MetaConnector.getCampanas(false);
+      const match = list.find(c => c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase()));
+      if (!match) return `No encontré campaña con "${campana}".`;
+      campanaId = match.id; campanaNombre = match.name;
+    } else {
+      const todas = await MetaConnector.getMetricasTodasCampanas(periodo);
+      if (!todas.length) return 'No hay datos.';
+      const top = todas.sort((a, b) => b.spend - a.spend)[0];
+      campanaId = top.campana_id; campanaNombre = top.campana_nombre;
+    }
+    const horas = await MetaConnector.getBreakdownHorario(campanaId, periodo);
+    if (!horas.length) return `Sin datos horarios para "${campanaNombre}".`;
+
+    const conConv = horas.filter(h => h.conversiones > 0).sort((a, b) => a.cpl - b.cpl);
+    const top5    = conConv.slice(0, 5);
+    const peores  = conConv.slice(-3);
+
+    const lineas = [
+      `⏰ <b>Breakdown Horario — ${esc(campanaNombre)}</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+    ];
+    if (top5.length) {
+      lineas.push(`\n🟢 <b>Mejores horas (menor CPL):</b>`);
+      top5.forEach(h => {
+        const hr = `${h.hora}:00–${h.hora + 1}:00`;
+        lineas.push(`• ${hr}: CPL $${h.cpl} | ${h.conversiones} conv. | CTR ${h.ctr.toFixed(2)}%`);
+      });
+    }
+    if (peores.length) {
+      lineas.push(`\n🔴 <b>Peores horas (mayor CPL):</b>`);
+      peores.forEach(h => {
+        const hr = `${h.hora}:00–${h.hora + 1}:00`;
+        lineas.push(`• ${hr}: CPL $${h.cpl} | $${h.spend.toFixed(2)} gastados`);
+      });
+    }
+    if (top5.length >= 3) {
+      const mejores = top5.map(h => `${h.hora}h`).join(', ');
+      lineas.push(`\n💡 <b>Dayparting sugerido:</b> Activar solo en ${mejores} para reducir CPL.`);
+    }
+    await notif(lineas.join('\n'));
+    return `Análisis horario completado. Mejores horas: ${top5.map(h => `${h.hora}h`).join(', ')}. Ver Telegram.`;
+  },
+
+  async pausar_adset({ campana = null, nombre_adset }) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const campanas = campana
+      ? await MetaConnector.getCampanas(false).then(list => list.filter(c => c.name.toLowerCase().includes(campana.toLowerCase())))
+      : await MetaConnector.getCampanas(false);
+    if (!campanas.length) return `No encontré campaña${campana ? ` con "${campana}"` : ''}.`;
+
+    for (const c of campanas) {
+      const adsets = await MetaConnector.getAdSetsConMetricas(c.id, 'last_7d');
+      const match  = adsets.find(a => a.nombre.toLowerCase().includes(nombre_adset.toLowerCase()));
+      if (match) {
+        await MetaConnector.pausarAdSet(match.id);
+        await notif(`⏸ <b>AdSet pausado</b>\n📊 ${esc(match.nombre)}\nCampaña: ${esc(c.name)}`);
+        return `AdSet "${match.nombre}" pausado en "${c.name}".`;
+      }
+    }
+    return `No encontré adset con "${nombre_adset}". Usa metricas_adsets para ver los nombres exactos.`;
+  },
+
+  async pausar_ad({ campana = null, nombre_ad }) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const campanas = campana
+      ? await MetaConnector.getCampanas(false).then(list => list.filter(c => c.name.toLowerCase().includes(campana.toLowerCase())))
+      : await MetaConnector.getCampanas(false);
+    if (!campanas.length) return `No encontré campaña.`;
+
+    for (const c of campanas) {
+      const ads = await MetaConnector.getAnunciosConMetricas(c.id, 'last_7d');
+      const match = ads.find(a => a.ad_nombre.toLowerCase().includes(nombre_ad.toLowerCase()));
+      if (match) {
+        await MetaConnector.pausarAd(match.ad_id);
+        await notif(`⏸ <b>Anuncio pausado</b>\n🎨 ${esc(match.ad_nombre)}\nCampaña: ${esc(c.name)}`);
+        return `Anuncio "${match.ad_nombre}" pausado.`;
+      }
+    }
+    return `No encontré anuncio con "${nombre_ad}". Usa metricas_anuncios para ver los nombres exactos.`;
+  },
+
+  async refresh_creativo({ campana = null } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const campanas = campana
+      ? await MetaConnector.getCampanas(true).then(list => list.filter(c => c.name.toLowerCase().includes(campana.toLowerCase())))
+      : await MetaConnector.getCampanas(true);
+    if (!campanas.length) return 'No hay campañas activas.';
+
+    const resultados = [];
+    for (const c of campanas) {
+      const freq = await MetaConnector.getFrecuenciaYAlcance(c.id, 'last_7d');
+      if (!freq) continue;
+      if (freq.frequency >= 3.0) {
+        const producto = c.name.split(' — ')[1] || c.name;
+        await notif(`🔄 Generando slideshow para "${esc(c.name)}" (frecuencia: ${freq.frequency.toFixed(1)}x)...`);
+        try {
+          const sl = await generarSlideshowParaCampana(producto, 'emprendedor-principiante', {}, 5);
+          await LearningsDB.guardar({
+            tipo: 'campana', contexto: `Refresh creativo: ${c.name}`,
+            accion: `Nuevo slideshow por fatiga ${freq.frequency.toFixed(1)}x`, resultado: `VideoID: ${sl.videoId}`,
+            exito: true, tags: ['fatiga', 'refresh'], relevancia: 8,
+          }).catch(() => {});
+          await notif(
+            `✅ <b>Creativo renovado</b>\n📊 ${esc(c.name)}\n` +
+            `🎬 Nuevo video slideshow ID: ${sl.videoId}\n` +
+            `📈 Frecuencia actual: ${freq.frequency.toFixed(1)}x (fatiga detectada)\n` +
+            `💡 Asigna este video a los adsets activos de esta campaña.`
+          );
+          resultados.push(`"${c.name}" → nuevo slideshow ${sl.videoId}`);
+        } catch (err) {
+          resultados.push(`"${c.name}" → error: ${err.message}`);
+        }
+      }
+    }
+    if (!resultados.length) return 'Ninguna campaña tiene fatiga crítica (frecuencia < 3.0). Creativos en buen estado.';
+    return `Refresh completado: ${resultados.join(' | ')}`;
+  },
+
+  async analisis_breakeven({ precio_producto = null, periodo = 'last_7d' } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const precio  = precio_producto || BUSINESS.breakeven?.precioProducto || 27;
+    const margen  = BUSINESS.breakeven?.margenNeto || 0.70;
+    const tasaConv = BUSINESS.breakeven?.tasaConversion || 0.02;
+    const cplBreakeven = +(precio * margen * tasaConv).toFixed(2);
+
+    const [cuenta, campanas] = await Promise.all([
+      MetaConnector.getInsightsCuenta(periodo),
+      MetaConnector.getMetricasTodasCampanas(periodo),
+    ]);
+
+    const roasPorCampana = await Promise.all(
+      campanas.map(async c => {
+        const r = await MetaConnector.getRoas(c.campana_id, periodo);
+        return { ...c, roas_data: r };
+      })
+    );
+
+    const gastoTotal   = cuenta?.spend || 0;
+    const convTotal    = cuenta?.conversiones || 0;
+    const cplCuenta    = convTotal > 0 ? +(gastoTotal / convTotal).toFixed(2) : null;
+    const ventasNecesarias = gastoTotal > 0 ? Math.ceil(gastoTotal / (precio * margen)) : 0;
+
+    const lineas = [
+      `💰 <b>Análisis Break-Even</b>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      `Período: ${periodo} | Precio producto: $${precio}`,
+      ``,
+      `<b>Cuenta completa:</b>`,
+      `💸 Gasto total: $${gastoTotal.toFixed(2)}`,
+      `🎯 CPL actual: ${cplCuenta ? `$${cplCuenta}` : '—'}`,
+      `🔑 CPL de break-even: $${cplBreakeven} (${tasaConv * 100}% conversión)`,
+      `📦 Ventas necesarias para cubrir gasto: ${ventasNecesarias}`,
+      ``,
+      cplCuenta
+        ? (cplCuenta <= cplBreakeven
+            ? `✅ <b>RENTABLE</b> — CPL actual ($${cplCuenta}) está por debajo del break-even ($${cplBreakeven})`
+            : `🔴 <b>NO RENTABLE</b> — CPL actual ($${cplCuenta}) supera el break-even ($${cplBreakeven}) en ${((cplCuenta / cplBreakeven - 1) * 100).toFixed(0)}%`)
+        : `⚪ Sin conversiones aún — necesitas conversiones para calcular rentabilidad`,
+      ``,
+    ];
+
+    const conRoas = roasPorCampana.filter(c => c.roas_data?.roas);
+    if (conRoas.length) {
+      lineas.push(`<b>ROAS por campaña:</b>`);
+      conRoas.forEach(c => {
+        const r = c.roas_data;
+        const icon = r.roas >= BUSINESS.riesgo?.roasMinimo ? '✅' : '⚠️';
+        lineas.push(`${icon} ${esc(c.campana_nombre)}: ROAS ${r.roas}x | Revenue $${r.revenue_atribuido.toFixed(2)} | Gasto $${r.spend.toFixed(2)}`);
+      });
+    }
+
+    lineas.push(`\n💡 Para escalar con seguridad necesitas CPL < $${cplBreakeven} sostenido por mínimo 3 días.`);
+    await notif(lineas.join('\n'));
+    return `Break-even: $${cplBreakeven} CPL. Actual: ${cplCuenta ? `$${cplCuenta}` : 'sin datos'}. ${cplCuenta && cplCuenta <= cplBreakeven ? 'Rentable ✅' : 'No rentable aún 🔴'}.`;
+  },
+
+  async escalar_escalera({ campana }) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const campanas = await MetaConnector.getCampanas(true);
+    const match = campanas.find(c => c.id === campana || c.name.toLowerCase().includes(campana.toLowerCase()));
+    if (!match) return `No encontré campaña activa con "${campana}".`;
+
+    const datos  = await CampaignManager.getDatosCampana(match);
+    const pasos  = BUSINESS.escalera?.pasos || [10, 20, 40, 80, 150, 300];
+    const presActual = datos.presupuesto_dia || (parseFloat(match.daily_budget || 0) / 100);
+    const idxActual  = pasos.findIndex(p => p >= presActual);
+    const siguiente  = idxActual >= 0 && idxActual < pasos.length - 1 ? pasos[idxActual + 1] : null;
+
+    if (!siguiente) return `La campaña ya está en el presupuesto máximo de la escalera ($${pasos[pasos.length - 1]}/día).`;
+
+    const cpl7d     = datos.ultimos_7_dias?.cpl;
+    const objetivo  = BUSINESS.campana.cplObjetivo;
+    const tolerancia = BUSINESS.escalera?.cplTolerancia || 1.3;
+    const cplMax    = +(objetivo * tolerancia).toFixed(2);
+
+    if (cpl7d && cpl7d > cplMax) {
+      return `No se puede escalar. CPL actual ($${cpl7d}) supera el límite para escalar ($${cplMax}). Espera a que el CPL baje antes de subir presupuesto.`;
+    }
+
+    await notif(
+      `📈 <b>Escalera de Presupuesto</b>\n` +
+      `📊 ${esc(match.name)}\n` +
+      `💰 $${presActual}/día → $${siguiente}/día\n` +
+      `${cpl7d ? `CPL actual: $${cpl7d} (límite: $${cplMax}) ✅` : 'Sin datos de CPL — escalando con precaución'}`
+    );
+
+    await CampaignManager.cambiarPresupuesto(match.id, siguiente);
+
+    await LearningsDB.guardar({
+      tipo: 'campana', contexto: `Escalera: ${match.name}`,
+      accion: `$${presActual}/día → $${siguiente}/día`,
+      resultado: `CPL previo: $${cpl7d || 'n/d'}`,
+      exito: true, tags: ['escalar', 'escalera'], relevancia: 8,
+    }).catch(() => {});
+
+    await notif(`✅ Presupuesto actualizado a $${siguiente}/día. Próximo paso: $${pasos[idxActual + 2] || 'máximo alcanzado'}/día (validar en 3 días).`);
+    return `Campaña "${match.name}" escalada de $${presActual} a $${siguiente}/día.`;
   },
 
   // ── BIBLIOTECA, AUDIENCIAS Y ESCALADO META ────────

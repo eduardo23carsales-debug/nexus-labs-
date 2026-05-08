@@ -4,13 +4,15 @@
 // Aprende de sus decisiones pasadas y del feedback de Eduardo.
 // ════════════════════════════════════════════════════
 
-import { MetaConnector }           from '../../connectors/meta.connector.js';
-import { AnthropicConnector }      from '../../connectors/anthropic.connector.js';
-import { TelegramConnector, esc }  from '../../connectors/telegram.connector.js';
-import { CampaignManager }         from '../../ads_engine/campaign-manager.js';
-import { SupervisorMemory }        from './memory.js';
-import BUSINESS                    from '../../config/business.config.js';
-import { FinancialControl }        from '../../financial_control/index.js';
+import { MetaConnector }                                    from '../../connectors/meta.connector.js';
+import { AnthropicConnector }                               from '../../connectors/anthropic.connector.js';
+import { TelegramConnector, esc }                           from '../../connectors/telegram.connector.js';
+import { CampaignManager }                                  from '../../ads_engine/campaign-manager.js';
+import { generarSlideshowParaCampana }                      from '../../ads_engine/campaign-creator.js';
+import { SupervisorMemory }                                 from './memory.js';
+import { LearningsDB }                                      from '../../memory/learnings.db.js';
+import BUSINESS                                             from '../../config/business.config.js';
+import { FinancialControl }                                 from '../../financial_control/index.js';
 
 const ICONOS = { pausar: '⏸', escalar: '📈', reducir: '📉', alerta: '⚠️', mantener: '✅' };
 
@@ -46,44 +48,65 @@ REGLAS DE NEGOCIO:
 - Presupuesto máximo diario: $${BUSINESS.presupuestoMaxDia}
 - CPL objetivo: < $${BUSINESS.campana.cplObjetivo}
 - Pausa si gasta > $${BUSINESS.limiteGastoSinLead} con 0 leads
-- Aumento autónomo máximo por ciclo: $${BUSINESS.limiteEscalarSolo} (en dólares de aumento)
+- Pausa si CPL > $${BUSINESS.riesgo.cplMaxAntesPausar} (riesgo crítico)
+- Aumento autónomo máximo por ciclo: $${BUSINESS.limiteEscalarSolo}
 - Escalada máxima por ciclo: ${BUSINESS.maxEscalarPct * 100}%
+- Escalera de presupuesto: ${BUSINESS.escalera.pasos.join(' → ')} USD/día
 - Cambios de presupuesto solo entre 9AM–7PM ET
 
 ACCIONES DISPONIBLES:
 - "pausar": detener la campaña
-- "escalar": subir presupuesto (especifica nuevo_presupuesto exacto en USD/día)
-- "reducir": bajar presupuesto (especifica nuevo_presupuesto exacto en USD/día)
-- "mantener": no hacer nada esta ronda — observar
-- "alerta": notificar a Eduardo sin ejecutar (anomalías, dudas, patrones extraños)
+- "escalar": subir presupuesto al siguiente paso de la escalera
+- "reducir": bajar presupuesto
+- "refresh_creativo": frecuencia > ${BUSINESS.riesgo.frecuenciaFatiga} — solicitar nuevo slideshow
+- "mantener": observar sin cambios
+- "alerta": notificar a Eduardo sin ejecutar
+
+REGLAS DE RIESGO AUTOMÁTICAS (aplicar antes que cualquier otra decisión):
+- CPL > $${BUSINESS.riesgo.cplMaxAntesPausar} → pausar inmediatamente (autonomo: true)
+- Gasto > $${BUSINESS.riesgo.gastoSinConversion} sin conversión → pausar inmediatamente
+- Frecuencia > ${BUSINESS.riesgo.frecuenciaFatiga} → "refresh_creativo" (autonomo: true)
+- CTR < ${BUSINESS.riesgo.ctrMinimoAlerta}% → "alerta" a Eduardo
+- Quality score global < ${BUSINESS.riesgo.qualityScoreMinimo} → "alerta" a Eduardo
+- ROAS < ${BUSINESS.riesgo.roasMinimo} → NO escalar, usar "mantener"
+
+ESCALERA DE PRESUPUESTO (nunca saltear pasos):
+Pasos: ${BUSINESS.escalera.pasos.join(' → ')} USD/día
+- Mínimo ${BUSINESS.escalera.diasValidacion} días en cada paso antes de subir
+- CPL debe estar dentro del ${Math.round((BUSINESS.escalera.cplTolerancia - 1) * 100)}% del objetivo para subir
+- Nunca más de un paso por ciclo
+
+BREAK-EVEN:
+- Precio producto: $${BUSINESS.breakeven.precioProducto}
+- Margen neto: ${BUSINESS.breakeven.margenNeto * 100}%
+- CPL de break-even estimado: $${+(BUSINESS.breakeven.precioProducto * BUSINESS.breakeven.margenNeto * BUSINESS.breakeven.tasaConversion).toFixed(2)} (asumiendo ${BUSINESS.breakeven.tasaConversion * 100}% conversión)
 
 AUTONOMÍA:
-- autonomo: true  → ejecutas la acción inmediatamente
-- autonomo: false → propones a Eduardo y esperas su aprobación
+- autonomo: true  → ejecutas inmediatamente
+- autonomo: false → propones a Eduardo y esperas aprobación
 
 CRITERIOS DE CONFIANZA:
-- 90–100%: patrón claro y consistente → actúa autónomamente
-- 70–89%: tendencia evidente → actúa autónomamente si el cambio es pequeño
-- 50–69%: señal ambigua → pide aprobación o usa "mantener"
-- < 50%: muy incierto → usa "alerta" o "mantener"
+- 90–100%: actúa autónomamente
+- 70–89%: actúa si cambio es pequeño
+- 50–69%: pide aprobación
+- < 50%: "alerta" o "mantener"
 
 TIPOS DE CAMPAÑA:
-- tipo_campana: "lead_gen" → métrica clave = leads. Pausa si gasta > $${BUSINESS.limiteGastoSinLead} con 0 leads
-- tipo_campana: "trafico"  → métrica clave = visitas_landing (NO leads). Evalúa por cpl (costo/visita) y ctr
-- tipo_campana: "desconocido" → usa "mantener" hasta tener más datos
+- "lead_gen" → métrica clave = leads
+- "trafico"  → métrica clave = visitas_landing y ctr
+- "desconocido" → "mantener" hasta tener datos
 
 REGLA CRÍTICA — CAMPAÑAS NUEVAS:
-- Si dias_activa <= 3: NUNCA pausar por falta de conversiones. Usar "mantener" siempre.
-- Si dias_activa <= 3 y gasto < $20: el algoritmo de Meta aún está en fase de aprendizaje. Mantener.
-- Solo pausar campaña nueva si el CPL es > 5x el objetivo o hay error técnico evidente.
+- dias_activa <= 3: NUNCA pausar por falta de conversiones
+- dias_activa <= 3 y gasto < $20: algoritmo en aprendizaje — mantener siempre
 
-PRINCIPIOS DE DECISIÓN:
-- dias_activa es la edad real de la campaña — úsala antes que cualquier otra métrica
-- El historial es tu memoria — si Eduardo rechazó algo similar, sé más conservador
-- Una campaña de tráfico con buen CTR y visitas_landing es exitosa aunque tenga 0 leads
-- Un CPL excelente con < 3 conversiones puede ser ruido estadístico — no escalar agresivamente
-- Si estás fuera de horario activo: solo puedes "pausar" (emergencias) o "mantener"
-- Explica tu razonamiento en español claro (máx 120 caracteres)`;
+PRINCIPIOS:
+- dias_activa es la edad real — úsala primero
+- El historial es tu memoria — si Eduardo rechazó algo similar, sé conservador
+- Quality score bajo = Meta te está penalizando = cambiar creativo antes de escalar
+- Device data: si mobile CTR >> desktop → verificar que landing sea mobile-friendly
+- Horario: si hay datos de horas pico → sugiere dayparting
+- Explica en español claro (máx 120 chars)`;
 
 export async function ejecutarSupervisor() {
   console.log('[Supervisor] Iniciando análisis IA...');
@@ -110,6 +133,23 @@ export async function ejecutarSupervisor() {
     }
     if (!datosCampanas.length) return;
 
+    // Recopilar datos profundos en paralelo para las campañas activas
+    const datosExtendidos = await Promise.all(datosCampanas.map(async c => {
+      const [quality, dispositivo, frecuencia, roas] = await Promise.allSettled([
+        MetaConnector.getQualityScores(c.id, 'last_7d'),
+        MetaConnector.getBreakdownDispositivo(c.id, 'last_7d'),
+        MetaConnector.getFrecuenciaYAlcance(c.id, 'last_7d'),
+        MetaConnector.getRoas(c.id, 'last_7d'),
+      ]);
+      return {
+        ...c,
+        quality_scores:  quality.status === 'fulfilled'    ? quality.value    : [],
+        dispositivo:     dispositivo.status === 'fulfilled' ? dispositivo.value : [],
+        frecuencia:      frecuencia.status === 'fulfilled'  ? frecuencia.value  : null,
+        roas:            roas.status === 'fulfilled'        ? roas.value        : null,
+      };
+    }));
+
     const [historial, hora, dia, ts] = await Promise.all([
       SupervisorMemory.cargarHistorial(20),
       Promise.resolve(horaET()),
@@ -124,13 +164,13 @@ ${dentroHorario
   ? '✅ Dentro de horario activo — cambios de presupuesto permitidos'
   : '⚠️ FUERA DE HORARIO ACTIVO — solo "pausar" si hay emergencia real, sino "mantener"'}
 
-CAMPAÑAS ACTIVAS (JSON con datos de hoy y últimos 7 días):
-${JSON.stringify(datosCampanas, null, 2)}
+CAMPAÑAS ACTIVAS — datos completos con quality scores, dispositivo, frecuencia y ROAS:
+${JSON.stringify(datosExtendidos, null, 2)}
 
 HISTORIAL DE DECISIONES PREVIAS (más reciente primero):
 ${historialAContexto(historial)}
 
-Devuelve ÚNICAMENTE un JSON array con una decisión por campaña, sin markdown ni texto adicional:
+Devuelve ÚNICAMENTE un JSON array con una decisión por campaña. Para "refresh_creativo" incluye el campo "segmento" con el nombre del segmento de la campaña. Sin markdown ni texto adicional:
 [
   {
     "campana_id": "ID_exacto_de_Meta",
@@ -193,6 +233,7 @@ Devuelve ÚNICAMENTE un JSON array con una decisión por campaña, sin markdown 
         try {
           if (d.decision === 'pausar') {
             await CampaignManager.pausar(d.campana_id);
+
           } else if ((d.decision === 'escalar' || d.decision === 'reducir') && d.nuevo_presupuesto) {
             const check = FinancialControl.validarPresupuestoDia(d.nuevo_presupuesto);
             if (!check.ok) {
@@ -201,7 +242,35 @@ Devuelve ÚNICAMENTE un JSON array con una decisión por campaña, sin markdown 
               continue;
             }
             await CampaignManager.cambiarPresupuesto(d.campana_id, d.nuevo_presupuesto);
+
+          } else if (d.decision === 'refresh_creativo') {
+            // Fatiga detectada → generar nuevo slideshow y notificar
+            const segmento  = d.segmento || 'emprendedor-principiante';
+            const producto  = d.campana_nombre.split(' — ')[1] || d.campana_nombre;
+            await TelegramConnector.notificar(
+              `🔄 <b>Supervisor: Refresh de creativo</b>\n` +
+              `📊 ${esc(d.campana_nombre)}\n` +
+              `⚠️ Fatiga detectada — generando nuevo slideshow...`
+            );
+            try {
+              const sl = await generarSlideshowParaCampana(producto, segmento, {}, 5);
+              await LearningsDB.guardar({
+                tipo: 'campana', contexto: `Refresh creativo por fatiga: ${d.campana_nombre}`,
+                accion: `Nuevo slideshow generado (${sl.nSlides} slides, videoId: ${sl.videoId})`,
+                resultado: 'Slideshow creado — pendiente de asignar al adset manualmente',
+                exito: true, tags: ['fatiga', 'refresh', 'slideshow'], relevancia: 8,
+              }).catch(() => {});
+              await TelegramConnector.notificar(
+                `✅ <b>Nuevo slideshow listo</b>\n` +
+                `🎬 ${sl.nSlides} slides generados\n` +
+                `🆔 Video ID: ${sl.videoId}\n` +
+                `💡 Asigna este video al adset con fatiga para renovar el creativo.`
+              );
+            } catch (slErr) {
+              await TelegramConnector.notificar(`⚠️ Refresh fallido para ${esc(d.campana_nombre)}: ${esc(slErr.message)}`);
+            }
           }
+
           await SupervisorMemory.marcarResultado(decisionId, 'ejecutado');
           ejecutadas.push({ ...d, decisionId });
           console.log(`[Supervisor] ✓ ${d.decision} — ${d.campana_nombre} (${d.confianza}%)`);
