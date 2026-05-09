@@ -737,6 +737,17 @@ const FUNCIONES_VAPI = [
   },
 
   {
+    name:        'auditar_campana_meta',
+    description: 'Audita una campaña Meta de extremo a extremo: si está activa y entregando, si la landing responde, si el copy es específico al producto o es genérico, quality score y fatiga de audiencia. Si no se dice qué campaña, audita la más reciente. Úsalo cuando Eduardo dice "¿se creó bien la campaña?", "audita la campaña X", "¿está funcionando el anuncio?", "¿el copy está bien?", "revisa que todo esté alineado".',
+    parameters: {
+      type: 'object',
+      properties: {
+        campaign_id: { type: 'string', description: 'ID de la campaña en Meta. Opcional — si no se dice, usa la más reciente.' },
+      },
+    },
+  },
+
+  {
     name:        'reparar_contenido_producto',
     description: 'Regenera y guarda el contenido del producto (lo que ve el comprador) sin tocar Stripe ni campañas. Úsalo cuando Eduardo dice "el acceso da error", "regenera el contenido", "el /acceso/ da 404", "arregla el producto".',
     parameters: {

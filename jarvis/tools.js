@@ -1167,6 +1167,30 @@ Es la forma más rápida de escalar lo que ya funciona sin crear desde cero.
     },
   },
 
+  // ── AUDITORÍA DE CAMPAÑA META ────────────────────
+  {
+    name: 'auditar_campana_meta',
+    description: `Audita una campaña de Meta Ads de extremo a extremo: verifica que esté activa y entregando, que los ads tengan URL válida, que la landing responda HTTP 200, que el copy sea específico al producto (no genérico), el quality score de Meta, y si hay fatiga de audiencia.
+Úsalo cuando Eduardo diga:
+- "¿se creó bien la campaña?"
+- "audita la campaña X"
+- "¿está funcionando el anuncio?"
+- "¿el copy está bien para el producto?"
+- "¿la landing está conectada?"
+- "revisa que todo esté alineado en Meta"
+- "¿qué tiene mal la campaña?"
+- Si no se especifica campaña, audita la más reciente activa.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        campaign_id: {
+          type: 'string',
+          description: 'ID de la campaña en Meta. Si no se da, audita la campaña activa más reciente.',
+        },
+      },
+    },
+  },
+
   // ── INTELIGENCIA META ADS ─────────────────────────
   {
     name: 'diagnostico_meta',
@@ -3839,6 +3863,239 @@ Responde en español, en tono directo como un socio estratégico, no como consul
 
     await notif(msg);
     return `Diagnóstico completado. Campañas analizadas: ${metricasCampanas.length}. Ver Telegram para el análisis completo.`;
+  },
+
+  // ── AUDITORÍA DE CAMPAÑA META ─────────────────────
+  async auditar_campana_meta({ campaign_id = null } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+    const checks = [];
+    const chkOk   = (label, detalle = '') => checks.push({ ok: true,  label, detalle });
+    const chkErr  = (label, detalle = '') => checks.push({ ok: false, label, detalle });
+    const chkWarn = (label, detalle = '') => checks.push({ ok: null,  label, detalle });
+
+    await notif(`🔍 <b>Auditando campaña Meta Ads...</b>`);
+
+    // 1. Resolver la campaña — por ID o la más reciente activa
+    let campana;
+    if (campaign_id) {
+      try {
+        campana = await MetaConnector.get(`/${campaign_id}`, {
+          fields: 'id,name,status,effective_status,daily_budget,objective,created_time',
+        });
+      } catch (e) {
+        return `No se pudo leer la campaña ${campaign_id}: ${e.message}`;
+      }
+    } else {
+      const todas = await MetaConnector.getCampanas(false);
+      if (!todas.length) return 'No hay campañas en la cuenta de Meta.';
+      const activas = todas.filter(c => c.effective_status === 'ACTIVE');
+      const pool = activas.length ? activas : todas;
+      campana = pool.sort((a, b) => new Date(b.created_time) - new Date(a.created_time))[0];
+    }
+
+    // CHECK 1 — Estado de la campaña
+    if (campana.effective_status === 'ACTIVE') {
+      chkOk('Estado campaña', `Activa`);
+    } else if (campana.effective_status === 'PAUSED') {
+      chkWarn('Estado campaña', `Pausada — no está entregando impresiones`);
+    } else {
+      chkErr('Estado campaña', `${campana.effective_status} — verifica en Meta Business Manager`);
+    }
+
+    // 2. Leer ads con creative details de esta campaña
+    let ads = [];
+    try {
+      const adsData = await MetaConnector.get(`/${campana.id}/ads`, {
+        fields: 'id,name,status,effective_status,creative{id,body,title,image_url,thumbnail_url,object_story_spec,link_url}',
+        limit:  25,
+      });
+      ads = adsData.data || [];
+    } catch (e) {
+      chkWarn('Ads de la campaña', `No se pudo leer: ${e.message}`);
+    }
+
+    // CHECK 2 — Ads activos
+    const adsActivos = ads.filter(a => a.effective_status === 'ACTIVE');
+    if (adsActivos.length > 0) {
+      chkOk('Anuncios activos', `${adsActivos.length} de ${ads.length} activos`);
+    } else if (ads.length > 0) {
+      chkErr('Anuncios activos', `0 de ${ads.length} activos — ningún anuncio está entregando`);
+    } else {
+      chkErr('Anuncios activos', 'Sin anuncios — la campaña está vacía');
+    }
+
+    // 3. Extraer URL y copy de cada ad
+    const adDetails = ads.map(ad => {
+      const spec     = ad.creative?.object_story_spec || {};
+      const linkData = spec.link_data || spec.video_data || {};
+      const url      = ad.creative?.link_url
+        || linkData.link
+        || linkData.call_to_action?.value?.link
+        || null;
+      const copy   = ad.creative?.body   || linkData.message || null;
+      const titulo = ad.creative?.title  || linkData.name || linkData.title || null;
+      return { id: ad.id, nombre: ad.name, estado: ad.effective_status, url, copy, titulo };
+    });
+
+    // CHECK 3 — URL en los ads
+    const adsConUrl  = adDetails.filter(a => a.url);
+    const adsSinUrl  = adDetails.filter(a => !a.url);
+    const esLeadForm = adsSinUrl.length === ads.length && ads.length > 0;
+
+    if (esLeadForm) {
+      chkWarn('URL destino en ads', 'Formulario nativo Lead Ads — sin URL externa. Verifica que el formulario esté activo en Meta.');
+    } else if (adsConUrl.length > 0 && adsSinUrl.length === 0) {
+      chkOk('URL destino en ads', `Todos los ads tienen URL destino`);
+    } else if (adsConUrl.length > 0) {
+      chkWarn('URL destino en ads', `${adsSinUrl.length} ad(s) sin URL — revisa sus creativos`);
+    } else {
+      chkErr('URL destino en ads', 'Ningún ad tiene URL — los usuarios no tienen a dónde ir');
+    }
+
+    // CHECK 4 — Landing accesible (HEAD request a cada URL única)
+    const urlsUnicas = [...new Set(adsConUrl.map(a => a.url))].slice(0, 3);
+    for (const url of urlsUnicas) {
+      try {
+        const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(9000) });
+        if (res.ok) {
+          chkOk('Landing accesible', `${url} → HTTP ${res.status}`);
+        } else {
+          chkErr('Landing accesible', `${url} → HTTP ${res.status} — página rota o redirige mal`);
+        }
+      } catch (e) {
+        chkErr('Landing accesible', `${url} no responde — ${e.message}`);
+      }
+    }
+
+    // CHECK 5 — Alineación del copy con el producto (Claude como auditor)
+    const copiesParaAudit = adDetails.filter(a => a.copy || a.titulo).slice(0, 3);
+    if (copiesParaAudit.length > 0) {
+      const productoNombre = campana.name
+        .replace(/Nexus Labs\s*[—\-–]\s*/i, '')
+        .replace(/\s*[—\-–]\s*\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}.*$/, '')
+        .trim();
+
+      const auditCopy = await AnthropicConnector.completar({
+        model:     'claude-haiku-4-5-20251001',
+        maxTokens: 200,
+        prompt: `Eres un auditor de Meta Ads. Determina si los copies de estos anuncios son ESPECÍFICOS al producto o GENÉRICOS (términos como "ingresos digitales", "comunidad privada", "plazas limitadas" sin mencionar el producto real).
+
+Producto de la campaña: "${productoNombre}"
+
+Copies en los anuncios:
+${copiesParaAudit.map((a, i) => `[${i + 1}] Título: "${a.titulo || '—'}" | Copy: "${(a.copy || '—').slice(0, 120)}"`).join('\n')}
+
+Responde con exactamente este formato:
+RESULTADO: ALINEADO
+DETALLE: [una frase de máx 100 chars]
+
+O:
+RESULTADO: GENERICO
+DETALLE: [una frase de máx 100 chars]
+
+O:
+RESULTADO: MIXTO
+DETALLE: [una frase de máx 100 chars]`,
+      });
+
+      const resMatch  = auditCopy.match(/RESULTADO:\s*(\w+)/i);
+      const detMatch  = auditCopy.match(/DETALLE:\s*(.+)/i);
+      const resultado = resMatch?.[1]?.toUpperCase() || 'DESCONOCIDO';
+      const detalle   = detMatch?.[1]?.trim() || auditCopy.slice(0, 100);
+
+      if (resultado === 'ALINEADO') {
+        chkOk('Copy alineado al producto', detalle);
+      } else if (resultado === 'GENERICO' || resultado === 'GENÉRICO') {
+        chkErr('Copy alineado al producto', `${detalle} — lanza la campaña de nuevo con relanzar_producto para regenerar copies`);
+      } else {
+        chkWarn('Copy alineado al producto', detalle);
+      }
+    } else {
+      chkWarn('Copy alineado al producto', 'No se pudo leer el copy de los creativos');
+    }
+
+    // CHECK 6 — Métricas de entrega (últimos 7 días)
+    const metricas = await MetaConnector.getMetricas(campana.id, 'last_7d');
+    if (metricas.spend > 0) {
+      const convStr = metricas.leads > 0
+        ? `${metricas.leads} leads | CPL $${metricas.cpl}`
+        : metricas.visitas_landing > 0
+          ? `${metricas.visitas_landing} visitas landing`
+          : 'sin conversiones aún';
+      chkOk('Campaña entregando', `$${metricas.spend.toFixed(2)} gastados | ${metricas.impressions.toLocaleString()} impresiones | CTR ${metricas.ctr.toFixed(2)}% | ${convStr}`);
+    } else {
+      chkWarn('Campaña entregando', 'Sin gasto en los últimos 7 días — puede estar en fase de aprendizaje o sin presupuesto');
+    }
+
+    // CHECK 7 — Quality Scores (solo cuando hay suficientes impresiones)
+    if (metricas.impressions >= 500) {
+      try {
+        const scores = await MetaConnector.getQualityScores(campana.id, 'last_7d');
+        const conAlerta = scores.filter(s => s.alerta);
+        if (scores.length === 0) {
+          chkWarn('Quality Scores', 'Meta no reporta scores aún — normal en primeros días');
+        } else if (conAlerta.length === 0) {
+          chkOk('Quality Scores', `${scores.length} ad(s) con calidad promedio o superior`);
+        } else {
+          chkWarn('Quality Scores', `${conAlerta.length} de ${scores.length} ads con calidad BELOW_AVERAGE — Meta limita su alcance`);
+        }
+      } catch {
+        chkWarn('Quality Scores', 'No disponible en este momento');
+      }
+    } else {
+      chkWarn('Quality Scores', `${metricas.impressions} impresiones — se necesitan 500+ para calcular quality score`);
+    }
+
+    // CHECK 8 — Frecuencia / fatiga de audiencia
+    if (metricas.impressions > 0) {
+      try {
+        const freq = await MetaConnector.getFrecuenciaYAlcance(campana.id, 'last_7d');
+        if (freq && freq.frequency > 0) {
+          if (!freq.alerta_fatiga) {
+            chkOk('Frecuencia de audiencia', `${freq.frequency.toFixed(1)}x — ${freq.nivel_fatiga}`);
+          } else {
+            chkWarn('Frecuencia de audiencia', `${freq.frequency.toFixed(1)}x — ${freq.nivel_fatiga} — rota creativos o amplía audiencia`);
+          }
+        }
+      } catch { /* silencioso si falla */ }
+    }
+
+    // Reporte final
+    const pasaron  = checks.filter(c => c.ok === true).length;
+    const fallaron = checks.filter(c => c.ok === false).length;
+    const alertas  = checks.filter(c => c.ok === null).length;
+    const total    = checks.length;
+
+    const EMOJI = { true: '✅', false: '❌', null: '⚠️' };
+    const lineas = checks.map(c =>
+      `${EMOJI[String(c.ok)]} <b>${esc(c.label)}</b>${c.detalle ? `\n   ${esc(c.detalle)}` : ''}`
+    );
+
+    const estadoFinal = fallaron === 0
+      ? (alertas === 0 ? '🟢 CAMPAÑA OK — todo correcto' : '🟡 FUNCIONAL — revisar alertas')
+      : `🔴 ${fallaron} PROBLEMA(S) CRÍTICO(S)`;
+
+    const presupuestoStr = campana.daily_budget
+      ? `$${(parseInt(campana.daily_budget) / 100).toFixed(0)}/día`
+      : 'presupuesto CBO';
+
+    const msgFinal =
+      `🔍 <b>Auditoría Campaña Meta</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📋 ${esc(campana.name)}\n` +
+      `💰 ${presupuestoStr} | ${campana.objective || '—'}\n` +
+      `${estadoFinal}\n` +
+      `✅ ${pasaron}/${total} | ❌ ${fallaron} errores | ⚠️ ${alertas} alertas\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      lineas.join('\n\n');
+
+    await notif(msgFinal);
+
+    if (fallaron === 0) {
+      return `Campaña "${campana.name}" — ${pasaron}/${total} checks OK. ${alertas > 0 ? `${alertas} alertas menores.` : 'Todo correcto.'}`;
+    }
+    const erroresStr = checks.filter(c => c.ok === false).map(c => `${c.label}: ${c.detalle}`).join('; ');
+    return `Campaña "${campana.name}" — ${fallaron} problema(s) crítico(s): ${erroresStr}`;
   },
 
   async metricas_adsets({ campana = null, periodo = 'last_7d' } = {}) {
