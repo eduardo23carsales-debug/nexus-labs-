@@ -594,38 +594,68 @@ router.post('/webhook/stripe', async (req, res) => {
       );
       if (yaEntregado.length) return;
 
-      // Buscar el experimento por payment_link_id (plink_xxx) — match exacto
+      // Buscar el experimento por payment_link_id (plink_xxx) — match exacto primero
       // sesion.payment_link es el ID del payment link (plink_xxx), no la URL
       const { rows: exps } = await query(
         `SELECT * FROM experiments WHERE stripe_payment_link IS NOT NULL ORDER BY creado_en DESC LIMIT 20`
       );
-      const exp = exps.find(e =>
-        sesion.payment_link && (
-          e.stripe_payment_link_id === sesion.payment_link ||
-          e.stripe_price_id === sesion.line_items?.data?.[0]?.price?.id
-        )
-      ) || exps.find(e => e.estado === 'activo') || exps[0];
+      const expExacto = sesion.payment_link
+        ? exps.find(e => e.stripe_payment_link_id === sesion.payment_link)
+        : null;
+      const exp = expExacto
+        || exps.find(e => e.estado === 'activo')
+        || exps[0];
 
       if (!exp) {
         console.warn('[Stripe Webhook] No se encontró experimento para el pago', sesion.id);
+        await TelegramConnector.notificar(
+          `⚠️ <b>Pago sin producto</b>\n📧 ${esc(emailCliente)}\n💵 $${((sesion.amount_total||0)/100).toFixed(2)}\n🔍 payment_link: ${sesion.payment_link || '—'}\n\nEntrega manual requerida.`
+        ).catch(() => {});
         return;
+      }
+
+      if (!expExacto) {
+        console.warn(`[Stripe Webhook] Match por fallback — payment_link ${sesion.payment_link} → experimento ${exp.nombre}`);
+        await TelegramConnector.notificar(
+          `⚠️ <b>Match por fallback</b>\n📦 ${esc(exp.nombre)}\n📧 ${esc(emailCliente)}\nVerifica que sea el producto correcto.`
+        ).catch(() => {});
       }
 
       const dominio    = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
       const productoUrl = exp.landing_slug ? `${dominio}/acceso/${exp.landing_slug}` : null;
 
-      await ResendConnector.entregarProducto({
-        para:            emailCliente,
-        nombreCliente,
-        nombreProducto:  exp.nombre,
-        contenido:       exp.contenido_producto || '',
-        productoUrl,
-        stripePaymentId: sesion.payment_intent,
-      });
+      try {
+        await ResendConnector.entregarProducto({
+          para:            emailCliente,
+          nombreCliente,
+          nombreProducto:  exp.nombre,
+          contenido:       exp.contenido_producto || '',
+          productoUrl,
+          stripePaymentId: sesion.payment_intent,
+        });
+      } catch (emailErr) {
+        console.error('[Stripe Webhook] Fallo en entrega de email:', emailErr.message);
+        await TelegramConnector.notificar(
+          `🚨 <b>EMAIL DE ENTREGA FALLIDO</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `📦 Producto: ${esc(exp.nombre)}\n` +
+          `📧 Cliente: ${esc(emailCliente)}\n` +
+          `💵 Pagó: $${((sesion.amount_total||0)/100).toFixed(2)}\n` +
+          `🔗 Acceso: ${productoUrl || 'sin URL'}\n` +
+          `⚠️ Error: ${esc(emailErr.message)}\n\n` +
+          `Envía el link manualmente al cliente.`
+        ).catch(() => {});
+        // No lanzar — el pago fue exitoso, solo falló el email
+      }
 
       await query(
         `INSERT INTO customers (email, nombre, experiment_id, producto, revenue, stripe_customer_id, stripe_payment_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (email) DO NOTHING`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (email) DO UPDATE SET
+           nombre = COALESCE(EXCLUDED.nombre, customers.nombre),
+           stripe_payment_id = EXCLUDED.stripe_payment_id,
+           revenue = customers.revenue + EXCLUDED.revenue,
+           actualizado_en = NOW()`,
         [emailCliente, nombreCliente || null, exp.id, exp.nombre,
          (sesion.amount_total || 0) / 100, sesion.customer || null, sesion.payment_intent || null]
       );

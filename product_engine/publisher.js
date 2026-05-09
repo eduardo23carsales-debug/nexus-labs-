@@ -226,6 +226,15 @@ Responde EXACTAMENTE con este JSON (sin markdown):
   <p style="margin-top:16px;font-size:13px">Pago seguro · Garantía 30 días · Acceso inmediato</p>
 </div>
 
+<footer style="text-align:center;padding:32px 24px;border-top:1px solid var(--border);color:var(--muted);font-size:12px;line-height:2">
+  <div style="max-width:760px;margin:0 auto">
+    <a href="/privacidad" style="color:var(--muted);text-decoration:underline;margin:0 12px">Política de Privacidad</a>
+    <a href="/terminos"   style="color:var(--muted);text-decoration:underline;margin:0 12px">Términos y Condiciones</a><br>
+    ${ENV.EMAIL_FROM_NAME || 'Nexus Labs'} · ${ENV.EMAIL_FROM || 'hola@gananciasconai.com'}<br>
+    © ${new Date().getFullYear()} · Todos los derechos reservados
+  </div>
+</footer>
+
 </body>
 </html>`;
 
