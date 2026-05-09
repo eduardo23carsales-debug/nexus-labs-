@@ -294,6 +294,20 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
     ? `Nexus Labs — ${nombreProducto.slice(0, 40)} — ${new Date().toLocaleDateString('es-US')}`
     : `Nexus Labs — ${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
 
+  // Resolver copies una sola vez: explícitos > IA para el producto > genéricos del segmento
+  let copiasEfectivas;
+  if (Array.isArray(copies) && copies.length) {
+    copiasEfectivas = copies;
+    console.log(`[AdsEngine] Usando ${copies.length} copies explícitos para "${nombreProducto || segmento}"`);
+  } else if (nombreProducto) {
+    console.log(`[AdsEngine] Generando copies dinámicos con IA para "${nombreProducto}"...`);
+    copiasEfectivas = await generarCopiesParaProducto(nombreProducto, nicho || seg.nombre, BUSINESS?.breakeven?.precioProducto || 37);
+    console.log(`[AdsEngine] ${copiasEfectivas.length} copies generados — primer título: "${copiasEfectivas[0]?.titulo}"`);
+  } else {
+    console.warn(`[AdsEngine] Sin nombreProducto — usando copies genéricos del segmento "${segmento}"`);
+    copiasEfectivas = seg.copies;
+  }
+
   // 1. Campaña — presupuesto + bid_strategy a nivel campaña (requerido con CBO en API v25)
   const campana = await MetaConnector.post(`/${adAccount()}/campaigns`, {
     name:                  nombre,
@@ -314,9 +328,8 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
     assetIdFijo = imagenHash;
   } else if (slideshow && nombreProducto) {
     console.log('[AdsEngine] Generando creativo...');
-    const copiasParaTest = (Array.isArray(copies) && copies.length) ? copies : seg.copies;
     const sl = modoTest
-      ? await generarCreativosTest(copiasParaTest, nombreProducto, nicho || seg.nombre, BUSINESS?.breakeven?.precioProducto || 27)
+      ? await generarCreativosTest(copiasEfectivas, nombreProducto, nicho || seg.nombre, BUSINESS?.breakeven?.precioProducto || 27)
       : await generarSlideshowParaCampana(nombreProducto, nicho || seg.nombre, seg, 5);
     assetTipo   = 'video';
     assetIdFijo = sl.videoId;
@@ -334,8 +347,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
   // 3. Formulario nativo (con redirect a Stripe si está disponible)
   const formularioId = await crearFormulario(segmento, stripeUrl);
 
-  // 4. AdSets + Creativos + Ads — usa copies específicos del producto si se pasan
-  const copiasEfectivas = (Array.isArray(copies) && copies.length) ? copies : seg.copies;
+  // 4. AdSets + Creativos + Ads
   const ads = [];
   for (const copy of copiasEfectivas) {
     try {
@@ -394,7 +406,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
     throw new Error(`Campaña creada (${campana.id}) pero ningún ad se pudo crear — campaña pausada automáticamente. Revisa los logs de adsets.`);
   }
 
-  console.log(`[AdsEngine] Campaña lista: ${ads.length}/${seg.copies.length} ads creados`);
+  console.log(`[AdsEngine] Campaña lista: ${ads.length}/${copiasEfectivas.length} ads creados`);
 
   return {
     campaign_id:  campana.id,
@@ -417,6 +429,20 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
     ? `Nexus Labs — ${nombreProducto.slice(0, 40)} — ${new Date().toLocaleDateString('es-US')}`
     : `Nexus Labs — ${seg.nombre} — ${new Date().toLocaleDateString('es-US')}`;
 
+  // Resolver copies una sola vez: explícitos > IA para el producto > genéricos del segmento
+  let copiasEfectivas;
+  if (Array.isArray(copies) && copies.length) {
+    copiasEfectivas = copies;
+    console.log(`[AdsEngine] Usando ${copies.length} copies explícitos para "${nombreProducto || segmento}"`);
+  } else if (nombreProducto) {
+    console.log(`[AdsEngine] Generando copies dinámicos con IA para "${nombreProducto}"...`);
+    copiasEfectivas = await generarCopiesParaProducto(nombreProducto, nicho || seg.nombre, BUSINESS?.breakeven?.precioProducto || 37);
+    console.log(`[AdsEngine] ${copiasEfectivas.length} copies generados — primer título: "${copiasEfectivas[0]?.titulo}"`);
+  } else {
+    console.warn(`[AdsEngine] Sin nombreProducto — usando copies genéricos del segmento "${segmento}"`);
+    copiasEfectivas = seg.copies;
+  }
+
   // 1. Campaña de tráfico — presupuesto + bid_strategy a nivel campaña (CBO)
   const campana = await MetaConnector.post(`/${adAccount()}/campaigns`, {
     name:                  nombre,
@@ -434,9 +460,8 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
 
   if (slideshow && nombreProducto) {
     console.log('[AdsEngine] Generando creativo...');
-    const copiasParaTest = (Array.isArray(copies) && copies.length) ? copies : seg.copies;
     const sl = modoTest
-      ? await generarCreativosTest(copiasParaTest, nombreProducto, nicho || seg.nombre, BUSINESS?.breakeven?.precioProducto || 27)
+      ? await generarCreativosTest(copiasEfectivas, nombreProducto, nicho || seg.nombre, BUSINESS?.breakeven?.precioProducto || 27)
       : await generarSlideshowParaCampana(nombreProducto, nicho || seg.nombre, seg, 5);
     assetTipo   = 'video';
     assetIdFijo = sl.videoId;
@@ -451,8 +476,7 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
     assetTipo = 'dalle';  // cada copy genera su propia imagen dentro del loop
   }
 
-  // 3. AdSets + Creativos + Ads — usa copies específicos del producto si se pasan
-  const copiasEfectivas = (Array.isArray(copies) && copies.length) ? copies : seg.copies;
+  // 3. AdSets + Creativos + Ads
   const ads = [];
   for (const copy of copiasEfectivas) {
     try {
