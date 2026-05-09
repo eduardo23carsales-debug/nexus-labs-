@@ -37,6 +37,7 @@ import { TwilioConnector }                      from '../connectors/twilio.conne
 import { JarvisMemoryDB }                       from '../memory/jarvis.db.js';
 import { SystemConfigDB }                       from '../memory/config.db.js';
 import { SystemState }                          from '../config/system-state.js';
+import { query }                               from '../config/database.js';
 import { GoogleCalendarConnector }              from '../connectors/google-calendar.connector.js';
 import { LearningsDB }                          from '../memory/learnings.db.js';
 import { CallsDB }                              from '../memory/calls.db.js';
@@ -1766,6 +1767,21 @@ export const TOOL_HANDLERS = {
 
     if (!StripeConnector.disponible()) {
       return '⚠️ STRIPE_SECRET_KEY no configurado. Agrega la variable en Railway y vuelve a intentarlo.';
+    }
+
+    // Si no recibimos ID, buscar el experimento existente por nombre para UPDATE en vez de INSERT
+    // Evita crear filas duplicadas (una con contenido, otra con Stripe)
+    if (!experimento_id && nicho.nombre_producto) {
+      const { rows } = await query(
+        `SELECT id FROM experiments
+         WHERE nombre ILIKE $1 OR nombre ILIKE $2
+         ORDER BY creado_en DESC LIMIT 1`,
+        [`%${nicho.nombre_producto}%`, `${nicho.nombre_producto.slice(0, 40)}%`]
+      ).catch(() => ({ rows: [] }));
+      if (rows[0]?.id) {
+        experimento_id = rows[0].id;
+        console.log(`[Jarvis] publicar_con_stripe — vinculando a experimento existente #${experimento_id}`);
+      }
     }
 
     const resultado = await publicarConStripe(nicho, null, experimento_id);
