@@ -2751,20 +2751,20 @@ export const TOOL_HANDLERS = {
     const err = (label, detalle = '') => checks.push({ ok: false, label, detalle });
     const warn = (label, detalle = '') => checks.push({ ok: null,  label, detalle });
 
-    // 1. Encontrar el experimento
+    // 1. Encontrar el experimento — obtener() trae SELECT * (incluye slug, stripe, landing_html, contenido)
     let exp = null;
     const id = parseInt(nombre_o_id);
     if (!isNaN(id)) {
       exp = await ExperimentsDB.obtener(id);
     } else {
-      const lista = await ExperimentsDB.listar('activo');
-      exp = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
-      if (!exp) {
-        const todas = await ExperimentsDB.listar('muerto');
-        exp = [...todas, ...(await ExperimentsDB.listar('extendido'))].find(
-          e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase())
-        );
-      }
+      const buscarPorNombre = async (estado) => {
+        const lista = await ExperimentsDB.listar(estado);
+        const match = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+        return match ? ExperimentsDB.obtener(match.id) : null;
+      };
+      exp = await buscarPorNombre('activo')
+         || await buscarPorNombre('muerto')
+         || await buscarPorNombre('extendido');
     }
 
     if (!exp) {
@@ -3020,10 +3020,11 @@ export const TOOL_HANDLERS = {
     if (!isNaN(id)) {
       exp = await ExperimentsDB.obtener(id);
     } else {
-      const activos  = await ExperimentsDB.listar('activo');
-      const muertos  = await ExperimentsDB.listar('muerto');
-      const todos    = [...activos, ...muertos];
-      exp = todos.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+      for (const estado of ['activo', 'muerto', 'extendido']) {
+        const lista = await ExperimentsDB.listar(estado);
+        const match = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+        if (match) { exp = await ExperimentsDB.obtener(match.id); break; }
+      }
     }
     if (!exp) return `No encontré producto con "${nombre_o_id}". Usa ver_experimentos para ver los disponibles.`;
 
