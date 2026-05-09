@@ -1906,7 +1906,8 @@ export const TOOL_HANDLERS = {
     }
     if (!exp) {
       const lista = await ExperimentsDB.listar('activo');
-      exp = lista.find(e => e.nombre.toLowerCase().includes(nombre_o_id.toLowerCase()));
+      const match = lista.find(e => e.nombre.toLowerCase().includes(nombre_o_id.toLowerCase()));
+      if (match) exp = await ExperimentsDB.obtener(match.id);
     }
     if (!exp) {
       return `No encontré un producto con "${nombre_o_id}". Usa ver_experimentos para ver los disponibles.`;
@@ -2165,11 +2166,12 @@ export const TOOL_HANDLERS = {
 
     const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
 
-    // Buscar el producto en experimentos
+    // Buscar el producto en experimentos — obtener() para traer landing_slug completo
     const experimentos = await ExperimentsDB.listar('activo');
-    const exp = experimentos.find(e =>
+    const found = experimentos.find(e =>
       e.nombre.toLowerCase().includes(nombre_producto.toLowerCase())
     );
+    const exp = found ? await ExperimentsDB.obtener(found.id) : null;
 
     const dominio   = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
     const landingUrl = exp?.landing_slug ? `${dominio}/p/${exp.landing_slug}` : null;
@@ -2316,16 +2318,19 @@ export const TOOL_HANDLERS = {
     }
 
     // Detectar producto activo y extraer Stripe link para el botón
+    // Necesita SELECT directo — listar() no incluye stripe_payment_link ni landing_slug
     try {
-      const experimentos = await ExperimentsDB.listar('activo');
+      const { rows: exps } = await query(
+        `SELECT id, nombre, stripe_payment_link, landing_slug, precio
+         FROM experiments WHERE estado = 'activo'
+         ORDER BY creado_en DESC LIMIT 10`
+      ).catch(() => ({ rows: [] }));
       const dominio = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : '';
-      // Buscar por nombre (cualquier palabra del producto en el objetivo)
-      let exp = experimentos.find(e =>
+      let exp = exps.find(e =>
         e.nombre.toLowerCase().split(' ').some(w => w.length > 4 && objetivo.toLowerCase().includes(w))
       );
-      // Fallback: usar el experimento más reciente con Stripe link
-      if (!exp) exp = experimentos.find(e => e.stripe_payment_link);
-      if (!exp) exp = experimentos[0];
+      if (!exp) exp = exps.find(e => e.stripe_payment_link);
+      if (!exp) exp = exps[0];
 
       if (exp?.stripe_payment_link) {
         urlBoton   = exp.stripe_payment_link;
@@ -3082,7 +3087,7 @@ export const TOOL_HANDLERS = {
       return '⚠️ RESEND_API_KEY no configurado en Railway. El email de entrega no puede enviarse.';
     }
 
-    // Encontrar el experimento
+    // Encontrar el experimento — siempre obtener() para traer SELECT * completo
     let exp = null;
     if (nombre_o_id) {
       const id = parseInt(nombre_o_id);
@@ -3090,12 +3095,18 @@ export const TOOL_HANDLERS = {
         exp = await ExperimentsDB.obtener(id);
       } else {
         const lista = await ExperimentsDB.listar('activo');
-        exp = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+        const match = lista.find(e => e.nombre.toLowerCase().includes(String(nombre_o_id).toLowerCase()));
+        if (match) exp = await ExperimentsDB.obtener(match.id);
       }
     }
     if (!exp) {
+      // Buscar el más reciente que tenga contenido o landing — obtener() necesario para ver esos campos
       const activos = await ExperimentsDB.listar('activo');
-      exp = activos.find(e => e.contenido_producto || e.landing_slug) || activos[0];
+      for (const candidato of activos) {
+        const full = await ExperimentsDB.obtener(candidato.id);
+        if (full?.contenido_producto || full?.landing_slug) { exp = full; break; }
+      }
+      if (!exp && activos[0]) exp = await ExperimentsDB.obtener(activos[0].id);
     }
     if (!exp) {
       return 'No hay experimentos activos con producto para probar. Crea un producto primero con pipeline_completo.';
