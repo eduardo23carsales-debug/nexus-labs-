@@ -818,6 +818,24 @@ const FUNCIONES_VAPI = [
   },
 
   {
+    name:        'cambiar_campana_a_trafico',
+    description: 'Pausa la campaña de Lead Gen activa y crea una nueva optimizada para LandingPageView. Úsalo cuando Eduardo dice "cambia el objetivo de la campaña", "optimiza para tráfico", "la campaña no sale de aprendizaje".',
+    parameters: { type: 'object', properties: { nombre_producto: { type: 'string' }, presupuesto: { type: 'number' } } },
+  },
+
+  {
+    name:        'lanzar_campana_retargeting',
+    description: 'Crea campaña de retargeting para visitantes que no compraron, con copy diferente y opción de descuento. Úsalo cuando Eduardo dice "lanza retargeting", "campaña para los que vieron pero no compraron", "remarketing con descuento".',
+    parameters: { type: 'object', properties: { dias: { type: 'number' }, presupuesto: { type: 'number' }, nombre_producto: { type: 'string' }, descuento: { type: 'number' } } },
+  },
+
+  {
+    name:        'recuperar_carritos_abandonados',
+    description: 'Envía emails de recuperación a quienes llegaron al checkout de Stripe pero no pagaron. Úsalo cuando Eduardo dice "¿cuántos carritos abandonados hay?", "manda emails de recuperación", "recupera los que no pagaron".',
+    parameters: { type: 'object', properties: {} },
+  },
+
+  {
     name:        'duplicar_adset_ganador',
     description: 'Duplica el adset con mejor CPL y lo lanza con más presupuesto. Úsalo cuando Eduardo dice "duplica el mejor adset", "escala el segmento que más convierte", "dobla el que funciona".',
     parameters: { type: 'object', properties: { campana: { type: 'string' }, presupuesto: { type: 'number' }, periodo: { type: 'string' } } },

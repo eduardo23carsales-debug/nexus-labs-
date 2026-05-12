@@ -1168,6 +1168,56 @@ Es la forma más rápida de escalar lo que ya funciona sin crear desde cero.
     },
   },
 
+  // ── OPTIMIZACIÓN DE CAMPAÑA ───────────────────────
+  {
+    name: 'cambiar_campana_a_trafico',
+    description: `Pausa la campaña de Lead Gen activa y crea una nueva campaña optimizada para LandingPageView (tráfico directo a la landing).
+Esto es crítico cuando el presupuesto es bajo (<$30/día): Meta necesita 50 compras/semana para optimizar Purchase, pero con LandingPageView puede aprender desde el primer día.
+Úsalo cuando Eduardo diga:
+- "cambia el objetivo de la campaña"
+- "optimiza para tráfico en vez de leads"
+- "la campaña no está saliendo de aprendizaje"
+- "cambia a LandingPageView"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre_producto: { type: 'string', description: 'Nombre del producto. Si no se da, usa el experimento activo más reciente.' },
+        presupuesto:     { type: 'number', description: 'Presupuesto diario en USD. Si no se da, mantiene el de la campaña actual.' },
+      },
+    },
+  },
+
+  {
+    name: 'lanzar_campana_retargeting',
+    description: `Crea una campaña de retargeting dirigida a personas que ya visitaron la landing pero no compraron. Estas personas son 3-5x más baratas de convertir que audiencia fría porque ya conocen el producto.
+La campaña usa un copy diferente: oferta especial, urgencia o testimonio — no el mismo anuncio de siempre.
+Úsalo cuando Eduardo diga:
+- "lanza retargeting"
+- "apunta a los que visitaron pero no compraron"
+- "crea campaña para los que ya vieron el producto"
+- "quiero hacer remarketing con descuento"`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        dias:            { type: 'number', description: 'Ventana de retargeting en días. Default: 7' },
+        presupuesto:     { type: 'number', description: 'Presupuesto diario en USD. Default: 5' },
+        nombre_producto: { type: 'string', description: 'Nombre del producto. Si no se da, usa el activo más reciente.' },
+        descuento:       { type: 'number', description: 'Porcentaje de descuento especial para el retargeting. Ej: 20 = 20% off. Default: ninguno.' },
+      },
+    },
+  },
+
+  {
+    name: 'recuperar_carritos_abandonados',
+    description: `Envía emails de recuperación a personas que llegaron al checkout de Stripe pero no completaron el pago. Esto corre automáticamente cada hora, pero puedes activarlo manual para ver el reporte inmediato.
+Úsalo cuando Eduardo diga:
+- "¿cuántos carritos hay abandonados?"
+- "manda emails de recuperación"
+- "recupera los que no pagaron en Stripe"
+- "¿cuántos se fueron sin pagar?"`,
+    input_schema: { type: 'object', properties: {} },
+  },
+
   // ── AUDITORÍA DE CAMPAÑA META ────────────────────
   {
     name: 'auditar_campana_meta',
@@ -4328,6 +4378,193 @@ DETALLE: [una frase de máx 100 chars]`,
     }
 
     return `Acción no reconocida: "${accion}". Usa: activar, desactivar, estado.`;
+  },
+
+  // ── CAMBIAR CAMPAÑA A TRÁFICO ─────────────────────
+  async cambiar_campana_a_trafico({ nombre_producto = null, presupuesto = null } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    await notif('🔄 Cambiando objetivo de campaña a LandingPageView...');
+
+    // Buscar experimento activo con landing
+    let exp = null;
+    if (nombre_producto) {
+      const lista = await ExperimentsDB.listar('activo');
+      const match = lista.find(e => e.nombre.toLowerCase().includes(nombre_producto.toLowerCase()));
+      if (match) exp = await ExperimentsDB.obtener(match.id);
+    } else {
+      const { rows } = await query(
+        `SELECT id FROM experiments WHERE estado = 'activo' AND landing_slug IS NOT NULL ORDER BY creado_en DESC LIMIT 1`
+      );
+      if (rows[0]) exp = await ExperimentsDB.obtener(rows[0].id);
+    }
+
+    if (!exp?.landing_slug) {
+      return 'No encontré experimento activo con landing page. Primero publica el producto con Stripe.';
+    }
+
+    const dominio   = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : 'https://gananciasconai.com';
+    const landingUrl = `${dominio}/p/${exp.landing_slug}`;
+    const budget     = presupuesto || 10;
+
+    // Pausar campañas LEADS activas
+    const campanas = await MetaConnector.getCampanas(false);
+    const leadsCamps = campanas.filter(c =>
+      c.status === 'ACTIVE' && (c.objective === 'OUTCOME_LEADS' || c.objective === 'LEAD_GENERATION')
+    );
+    let pausadas = 0;
+    for (const c of leadsCamps) {
+      await MetaConnector.post(`/${c.id}`, { status: 'PAUSED' }).catch(() => {});
+      pausadas++;
+      console.log(`[Jarvis] Campaña Lead Gen pausada: ${c.name}`);
+    }
+
+    if (pausadas > 0) {
+      await notif(`⏸️ ${pausadas} campaña(s) de Lead Gen pausada(s)`);
+    }
+
+    // Crear nueva campaña de tráfico
+    await notif(`🚀 Creando campaña de tráfico para "${exp.nombre}" → ${landingUrl}`);
+    const resultado = await crearCampañaTrafico('emprendedor-principiante', landingUrl, budget, {
+      nombreProducto: exp.nombre,
+      nicho:          exp.nicho || 'productos digitales',
+      slideshow:      true,
+      modoTest:       true,
+    });
+
+    const msg =
+      `✅ <b>Campaña cambiada a tráfico</b>\n\n` +
+      `📋 ${esc(exp.nombre)}\n` +
+      `🎯 Objetivo: LANDING_PAGE_VIEWS (sale de aprendizaje más rápido)\n` +
+      `💰 Presupuesto: $${budget}/día\n` +
+      `🔗 Landing: ${landingUrl}\n` +
+      `📊 ID: ${resultado.campaign_id}\n` +
+      `📢 ${resultado.ads.length} ads creados\n\n` +
+      (pausadas > 0 ? `⏸️ ${pausadas} campaña(s) de Lead Gen pausada(s)\n` : '') +
+      `\n💡 Meta ahora optimiza para quien llega a la página. En 3-5 días tendrá datos suficientes para aprender.`;
+
+    await notif(msg);
+    return `Campaña cambiada a LandingPageView. ID: ${resultado.campaign_id}. Landing: ${landingUrl}`;
+  },
+
+  // ── RETARGETING ───────────────────────────────────
+  async lanzar_campana_retargeting({ dias = 7, presupuesto = 5, nombre_producto = null, descuento = null } = {}) {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    await notif(`🎯 Lanzando campaña de retargeting (ventana: ${dias} días)...`);
+
+    // Buscar experimento activo
+    let exp = null;
+    if (nombre_producto) {
+      const lista = await ExperimentsDB.listar('activo');
+      const match = lista.find(e => e.nombre.toLowerCase().includes(nombre_producto.toLowerCase()));
+      if (match) exp = await ExperimentsDB.obtener(match.id);
+    } else {
+      const { rows } = await query(
+        `SELECT id FROM experiments WHERE estado = 'activo' AND landing_slug IS NOT NULL ORDER BY creado_en DESC LIMIT 1`
+      );
+      if (rows[0]) exp = await ExperimentsDB.obtener(rows[0].id);
+    }
+
+    if (!exp?.stripe_payment_link) {
+      return 'No encontré experimento activo con landing y Stripe. Primero publica el producto.';
+    }
+
+    const dominio    = ENV.RAILWAY_DOMAIN ? `https://${ENV.RAILWAY_DOMAIN}` : 'https://gananciasconai.com';
+    const landingUrl = `${dominio}/p/${exp.landing_slug}`;
+    const precio     = exp.precio || 37;
+    const precioFinal = descuento ? Math.round(precio * (1 - descuento / 100)) : precio;
+    const linkPago   = exp.stripe_payment_link;
+
+    // 1. Crear audiencia de retargeting
+    await notif(`👥 Creando audiencia de visitantes (${dias} días)...`);
+    const audiencia = await MetaConnector.crearAudienciaRetargeting({
+      dias,
+      nombre: `Retargeting ${exp.nombre} — ${dias}d — ${new Date().toLocaleDateString('es-US')}`,
+    });
+
+    if (!audiencia.ok) {
+      return `Error creando audiencia de retargeting: ${audiencia.error}`;
+    }
+
+    await notif(`✅ Audiencia lista (ID: ${audiencia.id})`);
+
+    // 2. Generar copies de retargeting — ángulo diferente: urgencia/descuento/FOMO
+    const copiesRT = await AnthropicConnector.completarJSONConReintentos({
+      model:     'claude-haiku-4-5-20251001',
+      maxTokens: 400,
+      prompt: `Genera 2 copies de retargeting para Meta Ads. Estas personas YA vieron el producto "${exp.nombre}" (precio $${precio}) pero NO compraron. Necesitas reconquistarlos.
+${descuento ? `Hay un descuento especial de ${descuento}% — precio ahora $${precioFinal}.` : 'Usa urgencia y FOMO — no precio.'}
+Responde SOLO con JSON array de 2 objetos: [{tipo,titulo(máx 40 chars),cuerpo(máx 125 chars),cta(máx 20 chars)}]`,
+    }).catch(() => ([
+      { tipo: 'urgencia', titulo: `¿Aún piensas en ${exp.nombre}?`, cuerpo: `Viste el método. Ahora es tu turno de aplicarlo. ${descuento ? `Hoy tienes ${descuento}% de descuento.` : 'El precio sube pronto.'}`, cta: 'Entrar ahora' },
+      { tipo: 'fomo',     titulo: 'Otros ya están aplicando esto', cuerpo: `Más de 300 personas accedieron esta semana. ${descuento ? `Solo por hoy: $${precioFinal} en vez de $${precio}.` : 'No te quedes atrás.'}`, cta: 'Acceder ya' },
+    ]));
+
+    // 3. Crear campaña con audiencia personalizada
+    await notif('🚀 Creando campaña de retargeting...');
+    const resultado = await crearCampañaTrafico('emprendedor-principiante', linkPago, presupuesto, {
+      nombreProducto:  exp.nombre,
+      nicho:           exp.nicho || 'productos digitales',
+      copies:          Array.isArray(copiesRT) ? copiesRT : copiesRT.slice(0, 2),
+      slideshow:       true,
+      modoTest:        true,
+      audienciaId:     audiencia.id,
+    });
+
+    const msg =
+      `🎯 <b>Campaña de retargeting lanzada</b>\n\n` +
+      `📋 Producto: ${esc(exp.nombre)}\n` +
+      `👥 Audiencia: visitantes de los últimos ${dias} días\n` +
+      `💰 Presupuesto: $${presupuesto}/día\n` +
+      `${descuento ? `🏷️ Descuento: ${descuento}% → $${precioFinal}\n` : ''}` +
+      `📊 ID campaña: ${resultado.campaign_id}\n` +
+      `📢 ${resultado.ads.length} ads creados\n\n` +
+      `💡 El retargeting convierte 3-5x más barato que audiencia fría. Deja correr 3 días antes de juzgar.`;
+
+    await notif(msg);
+    return `Retargeting lanzado. ID: ${resultado.campaign_id}. Audiencia: ${audiencia.id}. ${resultado.ads.length} ads activos.`;
+  },
+
+  // ── RECUPERAR CARRITOS ABANDONADOS ────────────────
+  async recuperar_carritos_abandonados() {
+    const notif = (m) => TelegramConnector.notificar(m).catch(() => {});
+
+    await notif('📬 Procesando carritos abandonados de Stripe...');
+
+    // Obtener sesiones abandonadas para el reporte
+    const ahora   = Math.floor(Date.now() / 1000);
+    const hace48h = ahora - 48 * 60 * 60;
+    const abandonadas = await StripeConnector.getSesionesAbandonadas(hace48h).catch(() => []);
+
+    // Verificar cuántos ya compraron (para no contar duplicados)
+    const { rows: yaPagaron } = await query(
+      `SELECT email FROM customers WHERE email IS NOT NULL`
+    ).catch(() => ({ rows: [] }));
+    const emailsClientes = new Set(yaPagaron.map(r => r.email));
+
+    const pendientes = abandonadas.filter(s =>
+      s.customer_details?.email && !emailsClientes.has(s.customer_details.email)
+    );
+
+    // Ejecutar proceso de envío
+    const { ResendConnector } = await import('../connectors/resend.connector.js');
+    const enviados = await ResendConnector.procesarCarritosAbandonados().catch(e => {
+      console.error('[Jarvis] Error procesando carritos:', e.message);
+      return 0;
+    });
+
+    const msg =
+      `📬 <b>Carritos Abandonados — Reporte</b>\n\n` +
+      `🛒 Sesiones sin pago (últimas 48h): ${abandonadas.length}\n` +
+      `📧 Con email recuperable: ${pendientes.length}\n` +
+      `✉️ Emails enviados esta ejecución: ${enviados}\n\n` +
+      (pendientes.length > 0
+        ? `💡 Los emails de recuperación se envían automáticamente cada hora (2h y 24h después del abandono). No necesitas hacer nada más.`
+        : `✅ No hay carritos pendientes por recuperar en este momento.`);
+
+    await notif(msg);
+    return `Carritos procesados. ${abandonadas.length} abandonados detectados, ${pendientes.length} recuperables, ${enviados} emails enviados.`;
   },
 };
 

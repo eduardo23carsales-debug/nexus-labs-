@@ -419,7 +419,7 @@ export async function crearCampana(segmento, presupuestoDia, { imagenHash, copie
 }
 
 // ── CAMPAÑA DE TRÁFICO A URL (para Hotmart / landing page) ──
-export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies, nombreProducto, nicho, slideshow = true, modoTest = true } = {}) {
+export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia, { copies, nombreProducto, nicho, slideshow = true, modoTest = true, audienciaId = null } = {}) {
   const seg = SEGMENTOS[segmento];
   if (!seg) throw new Error(`Segmento desconocido: ${segmento}`);
   if (!urlDestino) throw new Error('urlDestino es requerido para campañas de tráfico');
@@ -492,12 +492,16 @@ export async function crearCampañaTrafico(segmento, urlDestino, presupuestoDia,
         assetId = (await generarImagenValidada(promptCopy, contexto)).hash;
       }
 
+      const targetingAdset = audienciaId
+        ? { ...TARGETING_DIGITAL, custom_audiences: [{ id: audienciaId }] }
+        : TARGETING_DIGITAL;
+
       const adset = await MetaConnector.post(`/${adAccount()}/adsets`, {
         name:             adsetNombre,
         campaign_id:      campana.id,
         status:           'ACTIVE',
         billing_event:    'IMPRESSIONS',
-        targeting:        TARGETING_DIGITAL,
+        targeting:        targetingAdset,
         optimization_goal: 'LANDING_PAGE_VIEWS',
       });
 
