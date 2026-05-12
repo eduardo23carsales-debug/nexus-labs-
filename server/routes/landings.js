@@ -11,12 +11,28 @@ const router = Router();
 
 // ── Página de gracias post-pago ───────────────────
 router.get('/gracias', (req, res) => {
+  const valor   = parseFloat(req.query.v) || 0;
+  const nombre  = req.query.n ? decodeURIComponent(req.query.n) : 'Producto';
+  const pixelId = ENV.META_PIXEL_ID;
+
+  const pixelScript = pixelId ? `
+<!-- Meta Pixel Purchase -->
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init','${pixelId}');
+fbq('track','PageView');
+fbq('track','Purchase',{value:${valor},currency:'USD',content_name:'${nombre.replace(/'/g, "\\'")}',content_type:'product'});
+</script>
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=${pixelId}&ev=Purchase&noscript=1"/></noscript>
+<!-- End Meta Pixel -->` : '';
+
   res.send(`<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>¡Compra exitosa!</title>
+  ${pixelScript}
 </head>
 <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#0f0f0f;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;">
   <div style="background:#1a1a1a;border:1px solid #222;border-top:3px solid #00ff88;border-radius:12px;padding:48px 40px;max-width:560px;width:90%;text-align:center;">

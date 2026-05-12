@@ -39,7 +39,7 @@ export const StripeConnector = {
       line_items:        [{ price: precioObj.id, quantity: 1 }],
       after_completion:  {
         type:     'redirect',
-        redirect: { url: `${dominio}/gracias` },
+        redirect: { url: `${dominio}/gracias?v=${Math.round(precio * 100) / 100}&n=${encodeURIComponent(nombre)}` },
       },
     });
 
